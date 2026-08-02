@@ -9,6 +9,8 @@ import {
   nonPresente as nonPresenteSupabase,
   statisticheServiti,
   cercaAttivita,
+  mieAttivita,
+  eliminaAttivita,
   ascoltaAggiornamenti,
 } from "./lib/queries";
 
@@ -80,6 +82,18 @@ export default function App() {
 const [currentUser, setCurrentUser] = useState(null);
   const isLoggedIn = currentUser !== null;
   const isAdmin = currentUser?.user_metadata?.role === "admin";
+const handleElimina = async (business) => {
+    const conferma = window.confirm(`Sei sicuro di voler eliminare "${business.name}"? Questa azione non può essere annullata.`);
+    if (!conferma) return;
+    try {
+      await eliminaAttivita(business.id);
+      setMieAttivitaList((prev) => prev.filter((b) => b.id !== business.id));
+      setBusinesses((prev) => prev.filter((b) => b.id !== business.id));
+      if (activeBusiness?.id === business.id) setActiveBusiness(null);
+    } catch (err) {
+      alert("Errore nell'eliminazione: " + err.message);
+    }
+  };
 const handleLogout = async () => {
     await supabase.auth.signOut();
     setCurrentUser(null);
@@ -90,6 +104,13 @@ const handleLogout = async () => {
   // Viene impostata registrando una nuova attivita' o scegliendo
   // "Gestisci" da un'attivita' esistente nel pannello Admin.
   const [activeBusiness, setActiveBusiness] = useState(null);
+  const [mieAttivitaList, setMieAttivitaList] = useState([]);
+
+  useEffect(() => {
+    if (view === "operatore" && isLoggedIn && !activeBusiness) {
+      mieAttivita(currentUser.id).then(setMieAttivitaList).catch(console.error);
+    }
+  }, [view, isLoggedIn, activeBusiness, currentUser]);
 
   const [myTicket, setMyTicket] = useState(null);
   const [pulse, setPulse] = useState(false);
@@ -676,6 +697,12 @@ owner_id: currentUser.id,
           )}
         </div>
 
+        {view === "operatore" && isLoggedIn && (
+          <div style={{ marginTop: 10, marginBottom: -6 }}>
+            <button className="cta ghost" onClick={() => setActiveBusiness(null)}>Le mie attività</button>
+          </div>
+        )}
+
         {errore && (
           <div className="error-box">{errore}</div>
         )}
@@ -747,15 +774,38 @@ owner_id: currentUser.id,
               </button>
             </div>
           )
-        ) : view === "operatore" ? (
+         ) : view === "operatore" ? (
           !isLoggedIn ? (
             <Login onLoginSuccess={(user) => setCurrentUser(user)} />
           ) : !activeBusiness ? (
             <div className="board-panel">
-              <div className="board-label">Nessuna attivita' selezionata</div>
-              <p style={{ fontSize: 13, color: "#9FB3AC" }}>
-                Vai su "Registra" per crearne una nuova, oppure su "Admin" e scegli "Gestisci".
-              </p>
+              <div className="board-label">Le tue attivita'</div>
+              {mieAttivitaList.length === 0 ? (
+                <p style={{ fontSize: 13, color: "#9FB3AC" }}>
+                  Non hai ancora nessuna attivita'. Vai su "Crea Attività" per crearne una.
+                </p>
+              ) : (
+                <div className="admin-list">
+                  {mieAttivitaList.map((b) => (
+                    <div className="admin-card" key={b.id}>
+                      <div className="admin-card-top">
+                        <div>
+                          <div className="admin-card-name">{b.name}</div>
+                          <div className="admin-card-type"><Tag size={11} /> {b.type}</div>
+                        </div>
+                      </div>
+                     <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                        <button className="cta dark" style={{ flex: 1 }} onClick={() => selezionaAttivita(b)}>
+                          Gestisci
+                        </button>
+                        <button className="cta" style={{ flex: 1, background: "#C0392B", color: "#F1ECDA", border: "none" }} onClick={() => handleElimina(b)}>
+                          Elimina
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           ) : (
             <div className="board-panel">
@@ -861,9 +911,14 @@ owner_id: currentUser.id,
                   </div>
                   <div className="admin-card-row"><MapPin size={12} /> {b.address || "—"}</div>
                   <div className="admin-card-row"><Link2 size={12} /> tuapp.it/coda/{b.slug}</div>
-                  <button className="cta dark" style={{ marginTop: 12 }} onClick={() => { selezionaAttivita(b); setView("operatore"); }}>
-                    Gestisci
-                  </button>
+                  <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                    <button className="cta dark" style={{ flex: 1 }} onClick={() => { selezionaAttivita(b); setView("operatore"); }}>
+                      Gestisci
+                    </button>
+                    <button className="cta" style={{ flex: 1, background: "#C0392B", color: "#F1ECDA", border: "none" }} onClick={() => handleElimina(b)}>
+                      Elimina
+                    </button>
+                  </div>
                 </div>
               ))}
               {businesses.length === 0 && (

@@ -88,7 +88,22 @@ export async function statisticheServiti(businessId, periodo) {
   if (error) throw error;
   return count;
 }
-
+// --- Operatore: le mie attivita' -----------------------------------------
+export async function mieAttivita(ownerId) {
+  const { data, error } = await supabase
+    .from("businesses")
+    .select("*")
+    .eq("owner_id", ownerId);
+  if (error) throw error;
+  return data;
+}
+export async function eliminaAttivita(businessId) {
+  const { error } = await supabase
+    .from("businesses")
+    .delete()
+    .eq("id", businessId);
+  if (error) throw error;
+}
 // --- Admin: ricerca attività su tutti i campi -----------------------------
 export async function cercaAttivita(query) {
   if (!query.trim()) {
