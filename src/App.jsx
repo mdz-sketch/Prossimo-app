@@ -697,9 +697,14 @@ owner_id: currentUser.id,
           )}
         </div>
 
-        {view === "operatore" && isLoggedIn && (
-          <div style={{ marginTop: 10, marginBottom: -6 }}>
-            <button className="cta ghost" onClick={() => setActiveBusiness(null)}>Le mie attività</button>
+        {(view === "operatore" || view === "statistiche") && isLoggedIn && (
+          <div style={{ marginTop: 10, marginBottom: -6, display: "flex", gap: 8 }}>
+            {isAdmin ? (
+              <button className="cta ghost" onClick={() => setView("admin")}>Torna ad Admin</button>
+            ) : (
+              <button className="cta ghost" onClick={() => { setActiveBusiness(null); setView("operatore"); }}>Le mie attività</button>
+            )}
+            <button className="cta ghost" onClick={() => setView("statistiche")}>Statistiche</button>
           </div>
         )}
 
@@ -795,13 +800,13 @@ owner_id: currentUser.id,
                         </div>
                       </div>
                      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                        <button className="cta dark" style={{ flex: 1 }} onClick={() => selezionaAttivita(b)}>
-                          Gestisci
-                        </button>
-                        <button className="cta" style={{ flex: 1, background: "#C0392B", color: "#F1ECDA", border: "none" }} onClick={() => handleElimina(b)}>
-                          Elimina
-                        </button>
-                      </div>
+                    <button className="cta dark" style={{ flex: 1 }} onClick={() => { selezionaAttivita(b); setView("operatore"); }}>
+                      Gestisci
+                    </button>
+                    <button className="cta" style={{ flex: 1, background: "#C0392B", color: "#F1ECDA", border: "none" }} onClick={() => handleElimina(b)}>
+                      Elimina
+                    </button>
+                  </div>
                     </div>
                   ))}
                 </div>
@@ -883,7 +888,7 @@ owner_id: currentUser.id,
             <Login onLoginSuccess={(user) => setCurrentUser(user)} />
           ) : (
           <div className="board-panel">
-            <div className="board-label"><ShieldCheck size={13} style={{ display: "inline", marginRight: 6, position: "relative", top: -1 }} />Pannello amministratore</div>
+            <button className="cta ghost" style={{ marginBottom: 12 }} onClick={() => setView("statistiche")}>Statistiche</button>
 
             <div className="search-box">
               <Search size={15} />
@@ -915,6 +920,9 @@ owner_id: currentUser.id,
                     <button className="cta dark" style={{ flex: 1 }} onClick={() => { selezionaAttivita(b); setView("operatore"); }}>
                       Gestisci
                     </button>
+                    <button className="cta dark" style={{ flex: 1, opacity: 0.75 }} onClick={() => { selezionaAttivita(b); setView("statistiche"); }}>
+                      Statistiche
+                    </button>
                     <button className="cta" style={{ flex: 1, background: "#C0392B", color: "#F1ECDA", border: "none" }} onClick={() => handleElimina(b)}>
                       Elimina
                     </button>
@@ -931,6 +939,13 @@ owner_id: currentUser.id,
           )
         ) : !isLoggedIn ? (
           <Login onLoginSuccess={(user) => setCurrentUser(user)} />
+        ) : view === "statistiche" ? (
+          <div className="board-panel">
+            <div className="board-label"><BarChart3 size={13} style={{ display: "inline", marginRight: 6, position: "relative", top: -1 }} />Statistiche</div>
+            <p style={{ fontSize: 13, color: "#9FB3AC", marginTop: 10 }}>
+              Sezione in costruzione.
+            </p>
+          </div>
         ) : (
           <div className="board-panel">
             {!registered ? (
