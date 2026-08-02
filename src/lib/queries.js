@@ -8,25 +8,10 @@ import { supabase } from "./supabaseClient";
 
 // --- Cliente: prende un numero -----------------------------------------
 export async function prendiNumero(businessId) {
-  const { data: business, error: readError } = await supabase
-    .from("businesses")
-    .select("last_issued")
-    .eq("id", businessId)
-    .single();
-  if (readError) throw readError;
-
-  const nextNumber = business.last_issued + 1;
-
-  const { error: updateError } = await supabase
-    .from("businesses")
-    .update({ last_issued: nextNumber })
-    .eq("id", businessId);
-  if (updateError) throw updateError;
-
-  const { error: ticketError } = await supabase
-    .from("tickets")
-    .insert({ business_id: businessId, number: nextNumber });
-  if (ticketError) throw ticketError;
+  const { data: nextNumber, error } = await supabase.rpc("prendi_numero_atomico", {
+    business_id_input: businessId,
+  });
+  if (error) throw error;
 
   return nextNumber;
 }

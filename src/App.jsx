@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, ShieldCheck, BarChart3, MapPin, Tag } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
+import Login from "./components/Login";
 import {
   prendiNumero as prendiNumeroSupabase,
   avanti as avantiSupabase,
@@ -76,6 +77,14 @@ const slugify = (s) =>
 
 export default function App() {
   const [view, setView] = useState("cliente");
+const [currentUser, setCurrentUser] = useState(null);
+  const isLoggedIn = currentUser !== null;
+  const isAdmin = currentUser?.user_metadata?.role === "admin";
+const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setCurrentUser(null);
+    setView("cliente");
+  };
 
   // Attivita' attualmente "attiva" per le viste Cliente/Operatore.
   // Viene impostata registrando una nuova attivita' o scegliendo
@@ -229,6 +238,7 @@ export default function App() {
         slug,
         current: 0,
         last_issued: 0,
+owner_id: currentUser.id,
       })
       .select()
       .single();
@@ -659,8 +669,11 @@ export default function App() {
         <div className="tabs">
           <button className={"tab-btn" + (view === "cliente" ? " active" : "")} onClick={() => setView("cliente")}>Cliente</button>
           <button className={"tab-btn" + (view === "operatore" ? " active" : "")} onClick={() => setView("operatore")}>Operatore</button>
-          <button className={"tab-btn" + (view === "registrazione" ? " active" : "")} onClick={() => setView("registrazione")}>Registra</button>
+          <button className={"tab-btn" + (view === "registrazione" ? " active" : "")} onClick={() => setView("registrazione")}>Crea Attività</button>
           <button className={"tab-btn" + (view === "admin" ? " active" : "")} onClick={() => setView("admin")}>Admin</button>
+          {isLoggedIn && (
+            <button className="tab-btn" onClick={handleLogout}>Esci</button>
+          )}
         </div>
 
         {errore && (
@@ -735,7 +748,9 @@ export default function App() {
             </div>
           )
         ) : view === "operatore" ? (
-          !activeBusiness ? (
+          !isLoggedIn ? (
+            <Login onLoginSuccess={(user) => setCurrentUser(user)} />
+          ) : !activeBusiness ? (
             <div className="board-panel">
               <div className="board-label">Nessuna attivita' selezionata</div>
               <p style={{ fontSize: 13, color: "#9FB3AC" }}>
@@ -814,6 +829,9 @@ export default function App() {
             </div>
           )
         ) : view === "admin" ? (
+          !isAdmin ? (
+            <Login onLoginSuccess={(user) => setCurrentUser(user)} />
+          ) : (
           <div className="board-panel">
             <div className="board-label"><ShieldCheck size={13} style={{ display: "inline", marginRight: 6, position: "relative", top: -1 }} />Pannello amministratore</div>
 
@@ -855,6 +873,9 @@ export default function App() {
               )}
             </div>
           </div>
+          )
+        ) : !isLoggedIn ? (
+          <Login onLoginSuccess={(user) => setCurrentUser(user)} />
         ) : (
           <div className="board-panel">
             {!registered ? (
