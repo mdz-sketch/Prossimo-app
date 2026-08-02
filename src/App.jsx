@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, ShieldCheck, BarChart3, MapPin, Tag } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "./lib/supabaseClient";
 import Login from "./components/Login";
 import {
@@ -82,6 +83,19 @@ export default function App() {
 const [currentUser, setCurrentUser] = useState(null);
   const isLoggedIn = currentUser !== null;
   const isAdmin = currentUser?.user_metadata?.role === "admin";
+const handleCondividi = async (business) => {
+    const url = `${window.location.origin}/coda/${business.slug}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: business.name, text: `Prendi il tuo numero per ${business.name}`, url });
+      } catch (err) {
+        // utente ha annullato la condivisione, nessun errore da mostrare
+      }
+    } else {
+      navigator.clipboard.writeText(url);
+      alert("Link copiato negli appunti!");
+    }
+  };
 const handleElimina = async (business) => {
     const conferma = window.confirm(`Sei sicuro di voler eliminare "${business.name}"? Questa azione non può essere annullata.`);
     if (!conferma) return;
@@ -146,6 +160,25 @@ const handleLogout = async () => {
 
   // Al primo avvio, se c'era un'attivita' scelta in precedenza, la ricarica
   useEffect(() => {
+    const pathParts = window.location.pathname.split("/").filter(Boolean);
+    const slugFromUrl = pathParts[0] === "coda" ? pathParts[1] : null;
+
+    if (slugFromUrl) {
+      supabase
+        .from("businesses")
+        .select("*")
+        .eq("slug", slugFromUrl)
+        .single()
+        .then(({ data }) => {
+          if (data) {
+            setActiveBusiness(data);
+            localStorage.setItem("prossimo_active_business_id", data.id);
+            setView("cliente");
+          }
+        });
+      return;
+    }
+
     const savedId = localStorage.getItem("prossimo_active_business_id");
     if (savedId) {
       supabase
@@ -688,10 +721,16 @@ owner_id: currentUser.id,
         <div className="wordmark"><span className="dot" />Prossimo</div>
 
         <div className="tabs">
-          <button className={"tab-btn" + (view === "cliente" ? " active" : "")} onClick={() => setView("cliente")}>Cliente</button>
-          <button className={"tab-btn" + (view === "operatore" ? " active" : "")} onClick={() => setView("operatore")}>Operatore</button>
+          {!isLoggedIn && (
+            <button className={"tab-btn" + (view === "cliente" ? " active" : "")} onClick={() => setView("cliente")}>Cliente</button>
+          )}
+          {!isAdmin && (
+            <button className={"tab-btn" + (view === "operatore" ? " active" : "")} onClick={() => setView("operatore")}>Operatore</button>
+          )}
           <button className={"tab-btn" + (view === "registrazione" ? " active" : "")} onClick={() => setView("registrazione")}>Crea Attività</button>
-          <button className={"tab-btn" + (view === "admin" ? " active" : "")} onClick={() => setView("admin")}>Admin</button>
+          {(!isLoggedIn || isAdmin) && (
+            <button className={"tab-btn" + (view === "admin" ? " active" : "")} onClick={() => setView("admin")}>Admin</button>
+          )}
           {isLoggedIn && (
             <button className="tab-btn" onClick={handleLogout}>Esci</button>
           )}
@@ -814,6 +853,20 @@ owner_id: currentUser.id,
             </div>
           ) : (
             <div className="board-panel">
+              <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid rgba(241,236,218,0.12)" }}>
+                <QRCodeSVG
+                  value={`${window.location.origin}/coda/${activeBusiness.slug}`}
+                  size={64}
+                  bgColor="#F1ECDA"
+                  fgColor="#16302B"
+                />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 11.5, color: "#9FB3AC", marginBottom: 6 }}>QR della tua coda</div>
+                  <button className="cta ghost" style={{ fontSize: 12.5, padding: "6px 10px" }} onClick={() => handleCondividi(activeBusiness)}>
+                    Condividi link
+                  </button>
+                </div>
+              </div>
               <div className="board-label">{activeBusiness.name} — Ora in servizio</div>
               <FlapNumber value={current} size="lg" />
 
@@ -1001,10 +1054,13 @@ owner_id: currentUser.id,
                     <div style={{ fontSize: 12.5, color: "rgba(22,48,43,0.6)", marginTop: 2 }}>{activeBusiness.address}</div>
                   )}
 
-                  <div className="qr-pattern">
-                    {qrCells.map((on, i) => (
-                      <span key={i} className={on ? "cell on" : "cell"} />
-                    ))}
+                  <div style={{ display: "flex", justifyContent: "center", margin: "16px 0" }}>
+                    <QRCodeSVG
+                      value={`${window.location.origin}/coda/${activeBusiness.slug}`}
+                      size={160}
+                      bgColor="#F1ECDA"
+                      fgColor="#16302B"
+                    />
                   </div>
 
                   <div className="url-chip">
