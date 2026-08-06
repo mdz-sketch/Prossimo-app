@@ -72,6 +72,7 @@ function MiniBarChart({ data, labels }) {
 // solo il totale mostrato sopra il grafico e' reale)
 const CHART_DATA = {
   giorno: { data: [4, 7, 9, 12, 8, 15, 11, 6, 9, 13, 10, 5], labels: ["9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20"] },
+  settimana: { data: [12, 18, 9, 22, 15, 27, 20], labels: ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"] },
   mese: { data: [22, 28, 19, 31, 25, 30, 27, 24, 33, 29, 21, 26, 32, 28, 24, 30, 27, 22, 29, 34, 26, 23, 31, 28, 25, 30, 27, 24, 29, 33], labels: Array.from({ length: 30 }, (_, i) => String(i + 1)) },
   anno: { data: [420, 460, 510, 480, 530, 610, 590, 570, 540, 520, 460, 500], labels: ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"] },
 };
@@ -131,8 +132,6 @@ const handleLogout = async () => {
   const [pulse, setPulse] = useState(false);
   const [servedToday, setServedToday] = useState(0);
   const [skippedToday, setSkippedToday] = useState(0);
-  const [statsPeriod, setStatsPeriod] = useState("giorno");
-  const [statsServiti, setStatsServiti] = useState(0);
   const [statsPeriodPage, setStatsPeriodPage] = useState("giorno");
   const [statsData, setStatsData] = useState({ serviti: 0, nonPresentati: 0, attesaMedia: 0 });
 
@@ -228,11 +227,6 @@ const handleLogout = async () => {
   useEffect(() => {
     refreshStats(activeBusiness?.id);
   }, [activeBusiness?.id]);
-
-  useEffect(() => {
-    if (!activeBusiness?.id) return;
-    statisticheServiti(activeBusiness.id, statsPeriod).then(setStatsServiti);
-  }, [activeBusiness?.id, statsPeriod]);
 
   const selezionaAttivita = (b) => {
     setActiveBusiness(b);
@@ -938,32 +932,6 @@ owner_id: currentUser.id,
                 ))}
                 {inCoda === 0 && <span style={{ fontSize: 13, color: "#9FB3AC" }}>Nessuno in coda al momento.</span>}
               </div>
-
-              <div className="stats-divider" />
-
-              <div className="board-label"><BarChart3 size={13} style={{ display: "inline", marginRight: 6, position: "relative", top: -1 }} />Statistiche</div>
-
-              <div className="tabs" style={{ marginTop: 0 }}>
-                <button className={"tab-btn" + (statsPeriod === "giorno" ? " active" : "")} onClick={() => setStatsPeriod("giorno")}>Giorno</button>
-                <button className={"tab-btn" + (statsPeriod === "mese" ? " active" : "")} onClick={() => setStatsPeriod("mese")}>Mese</button>
-                <button className={"tab-btn" + (statsPeriod === "anno" ? " active" : "")} onClick={() => setStatsPeriod("anno")}>Anno</button>
-              </div>
-
-              <div className="stat-grid" style={{ gridTemplateColumns: "repeat(2, 1fr)", marginTop: 14 }}>
-                <div className="stat-box">
-                  <div className="stat-num">{statsServiti}</div>
-                  <div className="stat-lbl">Serviti nel periodo</div>
-                </div>
-                <div className="stat-box">
-                  <div className="stat-num">{avgWaitMin}m</div>
-                  <div className="stat-lbl">Attesa media</div>
-                </div>
-              </div>
-
-              <MiniBarChart data={CHART_DATA[statsPeriod].data} labels={CHART_DATA[statsPeriod].labels} />
-              <p style={{ fontSize: 11, color: "#9FB3AC", marginTop: 10, textAlign: "center" }}>
-                Andamento — grafico dimostrativo, il totale sopra e' reale
-              </p>
             </div>
           )
         ) : view === "admin" ? (
@@ -1053,6 +1021,11 @@ owner_id: currentUser.id,
                     <div className="stat-lbl">Non presentati</div>
                   </div>
                 </div>
+
+                <MiniBarChart data={CHART_DATA[statsPeriodPage].data} labels={CHART_DATA[statsPeriodPage].labels} />
+                <p style={{ fontSize: 11, color: "#9FB3AC", marginTop: 10, textAlign: "center" }}>
+                  Andamento — grafico dimostrativo, i numeri sopra sono reali
+                </p>
               </>
             )}
           </div>
