@@ -18,57 +18,29 @@ export async function prendiNumero(businessId) {
 
 // --- Operatore: avanti ---------------------------------------------------
 export async function avanti(businessId) {
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("current")
-    .eq("id", businessId)
-    .single();
-
-  const nextCurrent = business.current + 1;
-
-  await supabase.from("businesses").update({ current: nextCurrent }).eq("id", businessId);
-  await supabase
-    .from("tickets")
-    .update({ status: "servito" })
-    .eq("business_id", businessId)
-    .eq("number", nextCurrent);
+  const { data, error } = await supabase.rpc("avanza_numero_atomico", {
+    business_id_input: businessId,
+  });
+  if (error) throw error;
+  return data;
 }
 
 // --- Operatore: richiama (torna indietro di un numero) -------------------
 export async function richiama(businessId) {
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("current")
-    .eq("id", businessId)
-    .single();
-
-  if (business.current <= 0) return;
-  const prevCurrent = business.current - 1;
-
-  await supabase.from("businesses").update({ current: prevCurrent }).eq("id", businessId);
-  await supabase
-    .from("tickets")
-    .update({ status: "in_attesa" })
-    .eq("business_id", businessId)
-    .eq("number", business.current);
+  const { data, error } = await supabase.rpc("richiama_numero_atomico", {
+    business_id_input: businessId,
+  });
+  if (error) throw error;
+  return data;
 }
 
 // --- Operatore: non presente ---------------------------------------------
 export async function nonPresente(businessId) {
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("current")
-    .eq("id", businessId)
-    .single();
-
-  const nextCurrent = business.current + 1;
-
-  await supabase.from("businesses").update({ current: nextCurrent }).eq("id", businessId);
-  await supabase
-    .from("tickets")
-    .update({ status: "non_presentato" })
-    .eq("business_id", businessId)
-    .eq("number", nextCurrent);
+  const { data, error } = await supabase.rpc("non_presente_atomico", {
+    business_id_input: businessId,
+  });
+  if (error) throw error;
+  return data;
 }
 
 // --- Statistiche: conteggi per periodo ------------------------------------

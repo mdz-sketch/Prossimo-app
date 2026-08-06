@@ -871,13 +871,13 @@ owner_id: currentUser.id,
               <FlapNumber value={current} size="lg" />
 
               <div className="op-actions">
-                <button className="cta primary" onClick={avanti}>
+                <button className="cta primary" onClick={avanti} disabled={inCoda === 0}>
                   <ArrowRight size={16} /> Avanti
                 </button>
-                <button className="cta dark" onClick={richiama} title="Torna al numero precedente">
+                <button className="cta dark" onClick={richiama} disabled={current === 0} title="Torna al numero precedente">
                   <RotateCcw size={16} /> Richiama
                 </button>
-                <button className="cta dark" onClick={nonPresente} title="Il cliente non si e' presentato">
+                <button className="cta dark" onClick={nonPresente} disabled={inCoda === 0} title="Il cliente non si e' presentato">
                   <SkipForward size={16} /> Non presente
                 </button>
               </div>
