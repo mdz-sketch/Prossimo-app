@@ -932,6 +932,14 @@ owner_id: currentUser.id,
                 ))}
                 {inCoda === 0 && <span style={{ fontSize: 13, color: "#9FB3AC" }}>Nessuno in coda al momento.</span>}
               </div>
+
+              <div className="stats-divider" />
+
+              <div className="board-label"><BarChart3 size={13} style={{ display: "inline", marginRight: 6, position: "relative", top: -1 }} />Andamento oggi</div>
+              <MiniBarChart data={CHART_DATA.giorno.data} labels={CHART_DATA.giorno.labels} />
+              <p style={{ fontSize: 11, color: "#9FB3AC", marginTop: 10, textAlign: "center" }}>
+                Andamento — grafico dimostrativo, i numeri sopra sono reali
+              </p>
             </div>
           )
         ) : view === "admin" ? (
