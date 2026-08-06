@@ -951,12 +951,22 @@ owner_id: currentUser.id,
 
               <div className="stats-divider" />
 
-              <div className="board-label"><BarChart3 size={13} style={{ display: "inline", marginRight: 6, position: "relative", top: -1 }} />Andamento oggi</div>
+              <div className="board-label"><BarChart3 size={13} style={{ display: "inline", marginRight: 6, position: "relative", top: -1 }} />Andamento oggi — persone</div>
               <MiniBarChart
                 labels={andamentoGiorno.labels}
                 series={[
                   { name: "Serviti", data: andamentoGiorno.serviti, color: "#C99A3E" },
                   { name: "Non presentati", data: andamentoGiorno.nonPresentati, color: "#B7472A" },
+                ]}
+              />
+              <p style={{ fontSize: 11, color: "#9FB3AC", marginTop: 10, textAlign: "center" }}>
+                Per fascia oraria di oggi
+              </p>
+
+              <div className="board-label" style={{ marginTop: 18 }}>Andamento oggi — attesa media (min)</div>
+              <MiniBarChart
+                labels={andamentoGiorno.labels}
+                series={[
                   { name: "Attesa media (min)", data: andamentoGiorno.attesaMedia, color: "#5C87A6" },
                 ]}
               />
@@ -1053,11 +1063,22 @@ owner_id: currentUser.id,
                   </div>
                 </div>
 
+                <div className="board-label" style={{ marginTop: 4 }}>Persone</div>
                 <MiniBarChart
                   labels={andamentoStats.labels}
                   series={[
                     { name: "Serviti", data: andamentoStats.serviti, color: "#C99A3E" },
                     { name: "Non presentati", data: andamentoStats.nonPresentati, color: "#B7472A" },
+                  ]}
+                />
+                <p style={{ fontSize: 11, color: "#9FB3AC", marginTop: 10, textAlign: "center" }}>
+                  Per fascia del periodo selezionato
+                </p>
+
+                <div className="board-label" style={{ marginTop: 18 }}>Attesa media (min)</div>
+                <MiniBarChart
+                  labels={andamentoStats.labels}
+                  series={[
                     { name: "Attesa media (min)", data: andamentoStats.attesaMedia, color: "#5C87A6" },
                   ]}
                 />
