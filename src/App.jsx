@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, ShieldCheck, BarChart3, MapPin, Tag } from "lucide-react";
+import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, BarChart3, MapPin, Tag } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "./lib/supabaseClient";
 import Login from "./components/Login";
@@ -10,6 +10,7 @@ import {
   nonPresente as nonPresenteSupabase,
   statisticheServiti,
   statisticheComplete,
+  andamentoPeriodo,
   cercaAttivita,
   mieAttivita,
   eliminaAttivita,
@@ -67,15 +68,7 @@ function MiniBarChart({ data, labels }) {
   );
 }
 
-// Dati puramente illustrativi per l'andamento del grafico a barre
-// (la distribuzione oraria/giornaliera non e' ancora calcolata dal database,
-// solo il totale mostrato sopra il grafico e' reale)
-const CHART_DATA = {
-  giorno: { data: [4, 7, 9, 12, 8, 15, 11, 6, 9, 13, 10, 5], labels: ["9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20"] },
-  settimana: { data: [12, 18, 9, 22, 15, 27, 20], labels: ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"] },
-  mese: { data: [22, 28, 19, 31, 25, 30, 27, 24, 33, 29, 21, 26, 32, 28, 24, 30, 27, 22, 29, 34, 26, 23, 31, 28, 25, 30, 27, 24, 29, 33], labels: Array.from({ length: 30 }, (_, i) => String(i + 1)) },
-  anno: { data: [420, 460, 510, 480, 530, 610, 590, 570, 540, 520, 460, 500], labels: ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"] },
-};
+const ORE_GIORNO = ["9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20"];
 
 const slugify = (s) =>
   s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
@@ -90,7 +83,7 @@ const handleCondividi = async (business) => {
     if (navigator.share) {
       try {
         await navigator.share({ title: business.name, text: `Prendi il tuo numero per ${business.name}`, url });
-      } catch (err) {
+      } catch {
         // utente ha annullato la condivisione, nessun errore da mostrare
       }
     } else {
@@ -134,10 +127,14 @@ const handleLogout = async () => {
   const [skippedToday, setSkippedToday] = useState(0);
   const [statsPeriodPage, setStatsPeriodPage] = useState("giorno");
   const [statsData, setStatsData] = useState({ serviti: 0, nonPresentati: 0, attesaMedia: 0 });
+  const [avgWaitToday, setAvgWaitToday] = useState(0);
+  const [andamentoGiorno, setAndamentoGiorno] = useState({ data: ORE_GIORNO.map(() => 0), labels: ORE_GIORNO });
+  const [andamentoStats, setAndamentoStats] = useState({ data: ORE_GIORNO.map(() => 0), labels: ORE_GIORNO });
 
   useEffect(() => {
     if (view !== "statistiche" || !activeBusiness?.id) return;
     statisticheComplete(activeBusiness.id, statsPeriodPage).then(setStatsData).catch(console.error);
+    andamentoPeriodo(activeBusiness.id, statsPeriodPage).then(setAndamentoStats).catch(console.error);
   }, [view, activeBusiness?.id, statsPeriodPage]);
 
   const [registered, setRegistered] = useState(false);
@@ -148,7 +145,6 @@ const handleLogout = async () => {
   const [formType, setFormType] = useState("Pizzeria");
   const [errore, setErrore] = useState("");
 
-  const avgWaitMin = 3;
   const current = activeBusiness?.current ?? 0;
   const lastIssued = activeBusiness?.last_issued ?? 0;
   const inCoda = Math.max(lastIssued - current, 0);
@@ -222,6 +218,9 @@ const handleLogout = async () => {
       .eq("status", "non_presentato")
       .gte("created_at", oggiDaMezzanotte);
     setSkippedToday(count || 0);
+    const oggi = await statisticheComplete(businessId, "giorno");
+    setAvgWaitToday(oggi.attesaMedia);
+    andamentoPeriodo(businessId, "giorno").then(setAndamentoGiorno).catch(console.error);
   };
 
   useEffect(() => {
@@ -314,17 +313,6 @@ owner_id: currentUser.id,
     setFormAddress("");
     setFormType("Pizzeria");
   };
-
-  // pattern deterministico "finto QR" derivato dallo slug attivita'
-  const qrCells = (() => {
-    const seed = activeBusiness ? activeBusiness.slug : "demo";
-    const cells = [];
-    for (let i = 0; i < 64; i++) {
-      const code = seed.charCodeAt(i % seed.length) + i * 7;
-      cells.push(code % 3 === 0);
-    }
-    return cells;
-  })();
 
   // --- Admin --------------------------------------------------------------
   useEffect(() => {
@@ -595,21 +583,6 @@ owner_id: currentUser.id,
         }
         .chip.active { background: #C99A3E; color: #16302B; border-color: #C99A3E; }
 
-        .qr-pattern {
-          margin: 16px auto 12px;
-          width: 112px;
-          height: 112px;
-          display: grid;
-          grid-template-columns: repeat(8, 1fr);
-          grid-template-rows: repeat(8, 1fr);
-          gap: 2px;
-          background: #16302B;
-          padding: 8px;
-          border-radius: 8px;
-        }
-        .qr-pattern .cell { background: transparent; border-radius: 1px; }
-        .qr-pattern .cell.on { background: #F1ECDA; }
-
         .url-chip {
           display: inline-flex;
           align-items: center;
@@ -816,7 +789,7 @@ owner_id: currentUser.id,
               </div>
               <div className="status-line" style={{ marginTop: 8 }}>
                 <span className="status-label">Attesa stimata</span>
-                <span className="status-value">~{position * avgWaitMin} min</span>
+                <span className="status-value">~{position * avgWaitToday} min</span>
               </div>
 
               {isMyTurn && (
@@ -916,7 +889,7 @@ owner_id: currentUser.id,
                   <div className="stat-lbl">Serviti oggi</div>
                 </div>
                 <div className="stat-box">
-                  <div className="stat-num">{avgWaitMin}m</div>
+                  <div className="stat-num">{avgWaitToday}m</div>
                   <div className="stat-lbl">Attesa media</div>
                 </div>
                 <div className="stat-box">
@@ -936,9 +909,9 @@ owner_id: currentUser.id,
               <div className="stats-divider" />
 
               <div className="board-label"><BarChart3 size={13} style={{ display: "inline", marginRight: 6, position: "relative", top: -1 }} />Andamento oggi</div>
-              <MiniBarChart data={CHART_DATA.giorno.data} labels={CHART_DATA.giorno.labels} />
+              <MiniBarChart data={andamentoGiorno.data} labels={andamentoGiorno.labels} />
               <p style={{ fontSize: 11, color: "#9FB3AC", marginTop: 10, textAlign: "center" }}>
-                Andamento — grafico dimostrativo, i numeri sopra sono reali
+                Numero di clienti arrivati per fascia
               </p>
             </div>
           )
@@ -1030,9 +1003,9 @@ owner_id: currentUser.id,
                   </div>
                 </div>
 
-                <MiniBarChart data={CHART_DATA[statsPeriodPage].data} labels={CHART_DATA[statsPeriodPage].labels} />
+                <MiniBarChart data={andamentoStats.data} labels={andamentoStats.labels} />
                 <p style={{ fontSize: 11, color: "#9FB3AC", marginTop: 10, textAlign: "center" }}>
-                  Andamento — grafico dimostrativo, i numeri sopra sono reali
+                  Numero di clienti arrivati per fascia
                 </p>
               </>
             )}

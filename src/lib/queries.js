@@ -99,6 +99,55 @@ export async function statisticheComplete(businessId, periodo) {
   };
 }
 
+// --- Statistiche: andamento reale per il grafico (conteggio ticket per fascia) --
+export async function andamentoPeriodo(businessId, periodo) {
+  const from = dataInizioPeriodo(periodo).toISOString();
+
+  const { data, error } = await supabase
+    .from("tickets")
+    .select("created_at")
+    .eq("business_id", businessId)
+    .gte("created_at", from);
+  if (error) throw error;
+
+  if (periodo === "giorno") {
+    const labels = ["9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20"];
+    const conteggi = labels.map(() => 0);
+    data.forEach((t) => {
+      const idx = labels.indexOf(String(new Date(t.created_at).getHours()));
+      if (idx !== -1) conteggi[idx]++;
+    });
+    return { data: conteggi, labels };
+  }
+
+  if (periodo === "settimana") {
+    const labels = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
+    const conteggi = labels.map(() => 0);
+    data.forEach((t) => {
+      const giornoSettimana = new Date(t.created_at).getDay();
+      conteggi[giornoSettimana === 0 ? 6 : giornoSettimana - 1]++;
+    });
+    return { data: conteggi, labels };
+  }
+
+  if (periodo === "mese") {
+    const labels = Array.from({ length: 30 }, (_, i) => String(i + 1));
+    const conteggi = labels.map(() => 0);
+    data.forEach((t) => {
+      const giornoMese = new Date(t.created_at).getDate();
+      if (giornoMese >= 1 && giornoMese <= 30) conteggi[giornoMese - 1]++;
+    });
+    return { data: conteggi, labels };
+  }
+
+  const labels = ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"];
+  const conteggi = labels.map(() => 0);
+  data.forEach((t) => {
+    conteggi[new Date(t.created_at).getMonth()]++;
+  });
+  return { data: conteggi, labels };
+}
+
 // --- Statistiche: conteggi per periodo ------------------------------------
 export async function statisticheServiti(businessId, periodo) {
   const now = new Date();
