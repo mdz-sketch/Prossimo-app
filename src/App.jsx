@@ -54,16 +54,38 @@ function FlapNumber({ value, size = "lg" }) {
   );
 }
 
-function MiniBarChart({ data, labels }) {
-  const max = Math.max(...data, 1);
+function MiniBarChart({ labels, series }) {
+  const massimi = series.map((s) => Math.max(...s.data, 1));
   return (
-    <div className="bar-chart">
-      {data.map((v, i) => (
-        <div className="bar-col" key={i}>
-          <div className="bar" style={{ height: `${Math.max((v / max) * 100, 4)}%` }} title={`${labels[i]}: ${v}`} />
-          <span className="bar-lbl">{labels[i]}</span>
-        </div>
-      ))}
+    <div>
+      <div className="bar-chart">
+        {labels.map((label, i) => (
+          <div className="bar-col" key={i}>
+            <div className="bar-group">
+              {series.map((s, si) => (
+                <div
+                  key={s.name}
+                  className="bar"
+                  style={{
+                    height: s.data[i] > 0 ? `${Math.max((s.data[i] / massimi[si]) * 100, 4)}%` : "0%",
+                    background: s.color,
+                  }}
+                  title={`${s.name}: ${s.data[i]}`}
+                />
+              ))}
+            </div>
+            <span className="bar-lbl">{label}</span>
+          </div>
+        ))}
+      </div>
+      <div className="bar-chart-legend">
+        {series.map((s) => (
+          <span className="legend-item" key={s.name}>
+            <span className="legend-dot" style={{ background: s.color }} />
+            {s.name}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -128,8 +150,9 @@ const handleLogout = async () => {
   const [statsPeriodPage, setStatsPeriodPage] = useState("giorno");
   const [statsData, setStatsData] = useState({ serviti: 0, nonPresentati: 0, attesaMedia: 0 });
   const [avgWaitToday, setAvgWaitToday] = useState(0);
-  const [andamentoGiorno, setAndamentoGiorno] = useState({ data: ORE_GIORNO.map(() => 0), labels: ORE_GIORNO });
-  const [andamentoStats, setAndamentoStats] = useState({ data: ORE_GIORNO.map(() => 0), labels: ORE_GIORNO });
+  const andamentoVuoto = { labels: ORE_GIORNO, serviti: ORE_GIORNO.map(() => 0), nonPresentati: ORE_GIORNO.map(() => 0), attesaMedia: ORE_GIORNO.map(() => 0) };
+  const [andamentoGiorno, setAndamentoGiorno] = useState(andamentoVuoto);
+  const [andamentoStats, setAndamentoStats] = useState(andamentoVuoto);
 
   useEffect(() => {
     if (view !== "statistiche" || !activeBusiness?.id) return;
@@ -616,11 +639,20 @@ owner_id: currentUser.id,
           justify-content: flex-end;
           align-items: center;
         }
-        .bar {
+        .bar-group {
           width: 100%;
-          max-width: 14px;
+          height: 100%;
+          display: flex;
+          align-items: flex-end;
+          justify-content: center;
+          gap: 1px;
+        }
+        .bar {
+          flex: 1;
+          min-width: 2px;
+          max-width: 5px;
           background: #C99A3E;
-          border-radius: 3px 3px 0 0;
+          border-radius: 2px 2px 0 0;
           transition: height 0.3s ease;
         }
         .bar-lbl {
@@ -629,6 +661,17 @@ owner_id: currentUser.id,
           color: #9FB3AC;
           margin-top: 5px;
         }
+        .bar-chart-legend {
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: center;
+          gap: 14px;
+          margin-top: 12px;
+          font-size: 10.5px;
+          color: #9FB3AC;
+        }
+        .legend-item { display: inline-flex; align-items: center; gap: 5px; }
+        .legend-dot { width: 8px; height: 8px; border-radius: 999px; display: inline-block; }
 
         .search-box {
           margin-top: 12px;
@@ -909,9 +952,16 @@ owner_id: currentUser.id,
               <div className="stats-divider" />
 
               <div className="board-label"><BarChart3 size={13} style={{ display: "inline", marginRight: 6, position: "relative", top: -1 }} />Andamento oggi</div>
-              <MiniBarChart data={andamentoGiorno.data} labels={andamentoGiorno.labels} />
+              <MiniBarChart
+                labels={andamentoGiorno.labels}
+                series={[
+                  { name: "Serviti", data: andamentoGiorno.serviti, color: "#C99A3E" },
+                  { name: "Non presentati", data: andamentoGiorno.nonPresentati, color: "#B7472A" },
+                  { name: "Attesa media (min)", data: andamentoGiorno.attesaMedia, color: "#5C87A6" },
+                ]}
+              />
               <p style={{ fontSize: 11, color: "#9FB3AC", marginTop: 10, textAlign: "center" }}>
-                Numero di clienti arrivati per fascia
+                Per fascia oraria di oggi
               </p>
             </div>
           )
@@ -1003,9 +1053,16 @@ owner_id: currentUser.id,
                   </div>
                 </div>
 
-                <MiniBarChart data={andamentoStats.data} labels={andamentoStats.labels} />
+                <MiniBarChart
+                  labels={andamentoStats.labels}
+                  series={[
+                    { name: "Serviti", data: andamentoStats.serviti, color: "#C99A3E" },
+                    { name: "Non presentati", data: andamentoStats.nonPresentati, color: "#B7472A" },
+                    { name: "Attesa media (min)", data: andamentoStats.attesaMedia, color: "#5C87A6" },
+                  ]}
+                />
                 <p style={{ fontSize: 11, color: "#9FB3AC", marginTop: 10, textAlign: "center" }}>
-                  Numero di clienti arrivati per fascia
+                  Per fascia del periodo selezionato
                 </p>
               </>
             )}

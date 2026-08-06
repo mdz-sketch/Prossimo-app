@@ -99,53 +99,58 @@ export async function statisticheComplete(businessId, periodo) {
   };
 }
 
-// --- Statistiche: andamento reale per il grafico (conteggio ticket per fascia) --
+// --- Statistiche: andamento reale per il grafico (serviti / non presentati /
+// attesa media per fascia oraria, giorno della settimana, giorno del mese o mese) --
+function bucketPerPeriodo(periodo) {
+  if (periodo === "giorno") {
+    const labels = ["9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20"];
+    return { labels, indiceDi: (d) => labels.indexOf(String(d.getHours())) };
+  }
+  if (periodo === "settimana") {
+    const labels = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
+    return { labels, indiceDi: (d) => { const g = d.getDay(); return g === 0 ? 6 : g - 1; } };
+  }
+  if (periodo === "mese") {
+    const labels = Array.from({ length: 30 }, (_, i) => String(i + 1));
+    return { labels, indiceDi: (d) => { const g = d.getDate(); return g >= 1 && g <= 30 ? g - 1 : -1; } };
+  }
+  const labels = ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"];
+  return { labels, indiceDi: (d) => d.getMonth() };
+}
+
 export async function andamentoPeriodo(businessId, periodo) {
   const from = dataInizioPeriodo(periodo).toISOString();
 
   const { data, error } = await supabase
     .from("tickets")
-    .select("created_at")
+    .select("status, created_at, served_at")
     .eq("business_id", businessId)
     .gte("created_at", from);
   if (error) throw error;
 
-  if (periodo === "giorno") {
-    const labels = ["9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20"];
-    const conteggi = labels.map(() => 0);
-    data.forEach((t) => {
-      const idx = labels.indexOf(String(new Date(t.created_at).getHours()));
-      if (idx !== -1) conteggi[idx]++;
-    });
-    return { data: conteggi, labels };
-  }
+  const { labels, indiceDi } = bucketPerPeriodo(periodo);
+  const serviti = labels.map(() => 0);
+  const nonPresentati = labels.map(() => 0);
+  const sommaAttesaMin = labels.map(() => 0);
+  const conteggioAttesa = labels.map(() => 0);
 
-  if (periodo === "settimana") {
-    const labels = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
-    const conteggi = labels.map(() => 0);
-    data.forEach((t) => {
-      const giornoSettimana = new Date(t.created_at).getDay();
-      conteggi[giornoSettimana === 0 ? 6 : giornoSettimana - 1]++;
-    });
-    return { data: conteggi, labels };
-  }
-
-  if (periodo === "mese") {
-    const labels = Array.from({ length: 30 }, (_, i) => String(i + 1));
-    const conteggi = labels.map(() => 0);
-    data.forEach((t) => {
-      const giornoMese = new Date(t.created_at).getDate();
-      if (giornoMese >= 1 && giornoMese <= 30) conteggi[giornoMese - 1]++;
-    });
-    return { data: conteggi, labels };
-  }
-
-  const labels = ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"];
-  const conteggi = labels.map(() => 0);
   data.forEach((t) => {
-    conteggi[new Date(t.created_at).getMonth()]++;
+    const idx = indiceDi(new Date(t.created_at));
+    if (idx === -1 || idx === undefined) return;
+    if (t.status === "servito") {
+      serviti[idx]++;
+      if (t.served_at) {
+        sommaAttesaMin[idx] += (new Date(t.served_at) - new Date(t.created_at)) / 60000;
+        conteggioAttesa[idx]++;
+      }
+    } else if (t.status === "non_presentato") {
+      nonPresentati[idx]++;
+    }
   });
-  return { data: conteggi, labels };
+
+  const attesaMedia = labels.map((_, i) => (conteggioAttesa[i] ? Math.round(sommaAttesaMin[i] / conteggioAttesa[i]) : 0));
+
+  return { labels, serviti, nonPresentati, attesaMedia };
 }
 
 // --- Statistiche: conteggi per periodo ------------------------------------
