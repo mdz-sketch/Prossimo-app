@@ -9,6 +9,7 @@ import {
   richiama as richiamaSupabase,
   nonPresente as nonPresenteSupabase,
   statisticheServiti,
+  statisticheComplete,
   cercaAttivita,
   mieAttivita,
   eliminaAttivita,
@@ -132,6 +133,13 @@ const handleLogout = async () => {
   const [skippedToday, setSkippedToday] = useState(0);
   const [statsPeriod, setStatsPeriod] = useState("giorno");
   const [statsServiti, setStatsServiti] = useState(0);
+  const [statsPeriodPage, setStatsPeriodPage] = useState("giorno");
+  const [statsData, setStatsData] = useState({ serviti: 0, nonPresentati: 0, attesaMedia: 0 });
+
+  useEffect(() => {
+    if (view !== "statistiche" || !activeBusiness?.id) return;
+    statisticheComplete(activeBusiness.id, statsPeriodPage).then(setStatsData).catch(console.error);
+  }, [view, activeBusiness?.id, statsPeriodPage]);
 
   const [registered, setRegistered] = useState(false);
   const [businesses, setBusinesses] = useState([]);
@@ -724,17 +732,39 @@ owner_id: currentUser.id,
           {!isLoggedIn && (
             <button className={"tab-btn" + (view === "cliente" ? " active" : "")} onClick={() => setView("cliente")}>Cliente</button>
           )}
-          {!isAdmin && (
+          {isLoggedIn && !isAdmin && (
             <button className={"tab-btn" + (view === "operatore" ? " active" : "")} onClick={() => setView("operatore")}>Operatore</button>
           )}
-          <button className={"tab-btn" + (view === "registrazione" ? " active" : "")} onClick={() => setView("registrazione")}>Crea Attività</button>
-          {(!isLoggedIn || isAdmin) && (
+          {isLoggedIn && (
+            <button className={"tab-btn" + (view === "registrazione" ? " active" : "")} onClick={() => setView("registrazione")}>Crea Attività</button>
+          )}
+          {isAdmin && (
             <button className={"tab-btn" + (view === "admin" ? " active" : "")} onClick={() => setView("admin")}>Admin</button>
           )}
           {isLoggedIn && (
             <button className="tab-btn" onClick={handleLogout}>Esci</button>
           )}
         </div>
+
+        {!isLoggedIn && (
+          <div style={{ textAlign: "center" }}>
+            <button
+              onClick={() => setView("operatore")}
+              style={{
+                background: "none",
+                border: "none",
+                color: "rgba(241,236,218,0.35)",
+                fontSize: 11.5,
+                marginTop: 14,
+                cursor: "pointer",
+                textDecoration: "underline",
+                textUnderlineOffset: "2px",
+              }}
+            >
+              Accesso operatore / admin
+            </button>
+          </div>
+        )}
 
         {(view === "operatore" || view === "statistiche") && isLoggedIn && (
           <div style={{ marginTop: 10, marginBottom: -6, display: "flex", gap: 8 }}>
@@ -756,7 +786,7 @@ owner_id: currentUser.id,
             <div className="board-panel">
               <div className="board-label">Nessuna attivita' selezionata</div>
               <p style={{ fontSize: 13, color: "#9FB3AC" }}>
-                Vai su "Registra" per crearne una nuova, oppure su "Admin" e scegli "Gestisci" su un'attivita' esistente.
+                Scansiona il QR code esposto nel locale per prendere il tuo numero. Sei il gestore di un'attivita'? Usa "Accesso operatore / admin" qui sopra.
               </p>
             </div>
           ) : myTicket === null ? (
@@ -994,10 +1024,37 @@ owner_id: currentUser.id,
           <Login onLoginSuccess={(user) => setCurrentUser(user)} />
         ) : view === "statistiche" ? (
           <div className="board-panel">
-            <div className="board-label"><BarChart3 size={13} style={{ display: "inline", marginRight: 6, position: "relative", top: -1 }} />Statistiche</div>
-            <p style={{ fontSize: 13, color: "#9FB3AC", marginTop: 10 }}>
-              Sezione in costruzione.
-            </p>
+            <div className="board-label"><BarChart3 size={13} style={{ display: "inline", marginRight: 6, position: "relative", top: -1 }} />
+              {activeBusiness ? activeBusiness.name : "Statistiche"}
+            </div>
+            {!activeBusiness ? (
+              <p style={{ fontSize: 13, color: "#9FB3AC", marginTop: 10 }}>
+                Seleziona un'attivita' da "Le mie attivita'" per vederne le statistiche.
+              </p>
+            ) : (
+              <>
+                <div className="tabs" style={{ marginTop: 12 }}>
+                  <button className={"tab-btn" + (statsPeriodPage === "giorno" ? " active" : "")} onClick={() => setStatsPeriodPage("giorno")}>Giorno</button>
+                  <button className={"tab-btn" + (statsPeriodPage === "settimana" ? " active" : "")} onClick={() => setStatsPeriodPage("settimana")}>Settimana</button>
+                  <button className={"tab-btn" + (statsPeriodPage === "mese" ? " active" : "")} onClick={() => setStatsPeriodPage("mese")}>Mese</button>
+                  <button className={"tab-btn" + (statsPeriodPage === "anno" ? " active" : "")} onClick={() => setStatsPeriodPage("anno")}>Anno</button>
+                </div>
+                <div className="stat-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)", marginTop: 14 }}>
+                  <div className="stat-box">
+                    <div className="stat-num">{statsData.serviti}</div>
+                    <div className="stat-lbl">Serviti</div>
+                  </div>
+                  <div className="stat-box">
+                    <div className="stat-num">{statsData.attesaMedia}m</div>
+                    <div className="stat-lbl">Attesa media</div>
+                  </div>
+                  <div className="stat-box">
+                    <div className="stat-num" style={{ color: "#B7472A" }}>{statsData.nonPresentati}</div>
+                    <div className="stat-lbl">Non presentati</div>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         ) : (
           <div className="board-panel">

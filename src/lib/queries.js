@@ -43,6 +43,62 @@ export async function nonPresente(businessId) {
   return data;
 }
 
+// --- Statistiche: conteggi + attesa media per periodo (pagina Statistiche) --
+function dataInizioPeriodo(periodo) {
+  const now = new Date();
+  if (periodo === "giorno") return new Date(now.setHours(0, 0, 0, 0));
+  if (periodo === "settimana") {
+    const giorno = now.getDay() === 0 ? 7 : now.getDay();
+    const lunedi = new Date(now);
+    lunedi.setDate(now.getDate() - giorno + 1);
+    lunedi.setHours(0, 0, 0, 0);
+    return lunedi;
+  }
+  if (periodo === "mese") return new Date(now.getFullYear(), now.getMonth(), 1);
+  return new Date(now.getFullYear(), 0, 1);
+}
+
+export async function statisticheComplete(businessId, periodo) {
+  const from = dataInizioPeriodo(periodo).toISOString();
+
+  const { count: serviti } = await supabase
+    .from("tickets")
+    .select("*", { count: "exact", head: true })
+    .eq("business_id", businessId)
+    .eq("status", "servito")
+    .gte("created_at", from);
+
+  const { count: nonPresentati } = await supabase
+    .from("tickets")
+    .select("*", { count: "exact", head: true })
+    .eq("business_id", businessId)
+    .eq("status", "non_presentato")
+    .gte("created_at", from);
+
+  const { data: ticketServiti } = await supabase
+    .from("tickets")
+    .select("created_at, served_at")
+    .eq("business_id", businessId)
+    .eq("status", "servito")
+    .not("served_at", "is", null)
+    .gte("created_at", from);
+
+  let attesaMedia = 0;
+  if (ticketServiti && ticketServiti.length > 0) {
+    const totaleMinuti = ticketServiti.reduce((acc, t) => {
+      const diffMs = new Date(t.served_at) - new Date(t.created_at);
+      return acc + diffMs / 60000;
+    }, 0);
+    attesaMedia = Math.round(totaleMinuti / ticketServiti.length);
+  }
+
+  return {
+    serviti: serviti || 0,
+    nonPresentati: nonPresentati || 0,
+    attesaMedia,
+  };
+}
+
 // --- Statistiche: conteggi per periodo ------------------------------------
 export async function statisticheServiti(businessId, periodo) {
   const now = new Date();
