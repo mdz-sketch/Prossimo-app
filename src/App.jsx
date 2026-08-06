@@ -55,19 +55,21 @@ function FlapNumber({ value, size = "lg" }) {
 }
 
 function MiniBarChart({ labels, series }) {
-  const massimi = series.map((s) => Math.max(...s.data, 1));
+  // Limite condiviso da tutte le serie del grafico (stessa unita' di misura),
+  // cosi' le altezze delle barre restano davvero confrontabili tra loro.
+  const limite = Math.max(...series.flatMap((s) => s.data), 0) + 5;
   return (
     <div>
       <div className="bar-chart">
         {labels.map((label, i) => (
           <div className="bar-col" key={i}>
             <div className="bar-group">
-              {series.map((s, si) => (
+              {series.map((s) => (
                 <div
                   key={s.name}
                   className="bar"
                   style={{
-                    height: s.data[i] > 0 ? `${Math.max((s.data[i] / massimi[si]) * 100, 4)}%` : "0%",
+                    height: s.data[i] > 0 ? `${Math.max((s.data[i] / limite) * 100, 4)}%` : "0%",
                     background: s.color,
                   }}
                   title={`${s.name}: ${s.data[i]}`}
@@ -347,6 +349,10 @@ owner_id: currentUser.id,
     <div className="board">
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=IBM+Plex+Mono:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+        .board, .board *, .board *::before, .board *::after {
+          box-sizing: border-box;
+        }
 
         .board {
           min-height: 100vh;
