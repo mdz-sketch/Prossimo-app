@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, ShieldCheck, BarChart3, MapPin, Tag } from "lucide-react";
+import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, BarChart3, MapPin, Tag } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "./lib/supabaseClient";
 import Login from "./components/Login";
@@ -9,6 +9,8 @@ import {
   richiama as richiamaSupabase,
   nonPresente as nonPresenteSupabase,
   statisticheServiti,
+  statisticheComplete,
+  andamentoPeriodo,
   cercaAttivita,
   mieAttivita,
   eliminaAttivita,
@@ -52,28 +54,45 @@ function FlapNumber({ value, size = "lg" }) {
   );
 }
 
-function MiniBarChart({ data, labels }) {
-  const max = Math.max(...data, 1);
+function MiniBarChart({ labels, series }) {
+  // Limite condiviso da tutte le serie del grafico (stessa unita' di misura),
+  // cosi' le altezze delle barre restano davvero confrontabili tra loro.
+  const limite = Math.max(...series.flatMap((s) => s.data), 0) + 5;
   return (
-    <div className="bar-chart">
-      {data.map((v, i) => (
-        <div className="bar-col" key={i}>
-          <div className="bar" style={{ height: `${Math.max((v / max) * 100, 4)}%` }} title={`${labels[i]}: ${v}`} />
-          <span className="bar-lbl">{labels[i]}</span>
-        </div>
-      ))}
+    <div>
+      <div className="bar-chart">
+        {labels.map((label, i) => (
+          <div className="bar-col" key={i}>
+            <div className="bar-group">
+              {series.map((s) => (
+                <div
+                  key={s.name}
+                  className="bar"
+                  style={{
+                    height: s.data[i] > 0 ? `${Math.max((s.data[i] / limite) * 100, 4)}%` : "0%",
+                    background: s.color,
+                  }}
+                  title={`${s.name}: ${s.data[i]}`}
+                />
+              ))}
+            </div>
+            <span className="bar-lbl">{label}</span>
+          </div>
+        ))}
+      </div>
+      <div className="bar-chart-legend">
+        {series.map((s) => (
+          <span className="legend-item" key={s.name}>
+            <span className="legend-dot" style={{ background: s.color }} />
+            {s.name}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
 
-// Dati puramente illustrativi per l'andamento del grafico a barre
-// (la distribuzione oraria/giornaliera non e' ancora calcolata dal database,
-// solo il totale mostrato sopra il grafico e' reale)
-const CHART_DATA = {
-  giorno: { data: [4, 7, 9, 12, 8, 15, 11, 6, 9, 13, 10, 5], labels: ["9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20"] },
-  mese: { data: [22, 28, 19, 31, 25, 30, 27, 24, 33, 29, 21, 26, 32, 28, 24, 30, 27, 22, 29, 34, 26, 23, 31, 28, 25, 30, 27, 24, 29, 33], labels: Array.from({ length: 30 }, (_, i) => String(i + 1)) },
-  anno: { data: [420, 460, 510, 480, 530, 610, 590, 570, 540, 520, 460, 500], labels: ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"] },
-};
+const ORE_GIORNO = ["9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20"];
 
 const slugify = (s) =>
   s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
@@ -88,7 +107,7 @@ const handleCondividi = async (business) => {
     if (navigator.share) {
       try {
         await navigator.share({ title: business.name, text: `Prendi il tuo numero per ${business.name}`, url });
-      } catch (err) {
+      } catch {
         // utente ha annullato la condivisione, nessun errore da mostrare
       }
     } else {
@@ -130,8 +149,18 @@ const handleLogout = async () => {
   const [pulse, setPulse] = useState(false);
   const [servedToday, setServedToday] = useState(0);
   const [skippedToday, setSkippedToday] = useState(0);
-  const [statsPeriod, setStatsPeriod] = useState("giorno");
-  const [statsServiti, setStatsServiti] = useState(0);
+  const [statsPeriodPage, setStatsPeriodPage] = useState("giorno");
+  const [statsData, setStatsData] = useState({ serviti: 0, nonPresentati: 0, attesaMedia: 0 });
+  const [avgWaitToday, setAvgWaitToday] = useState(0);
+  const andamentoVuoto = { labels: ORE_GIORNO, serviti: ORE_GIORNO.map(() => 0), nonPresentati: ORE_GIORNO.map(() => 0), attesaMedia: ORE_GIORNO.map(() => 0) };
+  const [andamentoGiorno, setAndamentoGiorno] = useState(andamentoVuoto);
+  const [andamentoStats, setAndamentoStats] = useState(andamentoVuoto);
+
+  useEffect(() => {
+    if (view !== "statistiche" || !activeBusiness?.id) return;
+    statisticheComplete(activeBusiness.id, statsPeriodPage).then(setStatsData).catch(console.error);
+    andamentoPeriodo(activeBusiness.id, statsPeriodPage).then(setAndamentoStats).catch(console.error);
+  }, [view, activeBusiness?.id, statsPeriodPage]);
 
   const [registered, setRegistered] = useState(false);
   const [businesses, setBusinesses] = useState([]);
@@ -141,7 +170,6 @@ const handleLogout = async () => {
   const [formType, setFormType] = useState("Pizzeria");
   const [errore, setErrore] = useState("");
 
-  const avgWaitMin = 3;
   const current = activeBusiness?.current ?? 0;
   const lastIssued = activeBusiness?.last_issued ?? 0;
   const inCoda = Math.max(lastIssued - current, 0);
@@ -215,16 +243,14 @@ const handleLogout = async () => {
       .eq("status", "non_presentato")
       .gte("created_at", oggiDaMezzanotte);
     setSkippedToday(count || 0);
+    const oggi = await statisticheComplete(businessId, "giorno");
+    setAvgWaitToday(oggi.attesaMedia);
+    andamentoPeriodo(businessId, "giorno").then(setAndamentoGiorno).catch(console.error);
   };
 
   useEffect(() => {
     refreshStats(activeBusiness?.id);
   }, [activeBusiness?.id]);
-
-  useEffect(() => {
-    if (!activeBusiness?.id) return;
-    statisticheServiti(activeBusiness.id, statsPeriod).then(setStatsServiti);
-  }, [activeBusiness?.id, statsPeriod]);
 
   const selezionaAttivita = (b) => {
     setActiveBusiness(b);
@@ -313,17 +339,6 @@ owner_id: currentUser.id,
     setFormType("Pizzeria");
   };
 
-  // pattern deterministico "finto QR" derivato dallo slug attivita'
-  const qrCells = (() => {
-    const seed = activeBusiness ? activeBusiness.slug : "demo";
-    const cells = [];
-    for (let i = 0; i < 64; i++) {
-      const code = seed.charCodeAt(i % seed.length) + i * 7;
-      cells.push(code % 3 === 0);
-    }
-    return cells;
-  })();
-
   // --- Admin --------------------------------------------------------------
   useEffect(() => {
     if (view !== "admin") return;
@@ -334,6 +349,10 @@ owner_id: currentUser.id,
     <div className="board">
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=IBM+Plex+Mono:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+        .board, .board *, .board *::before, .board *::after {
+          box-sizing: border-box;
+        }
 
         .board {
           min-height: 100vh;
@@ -593,21 +612,6 @@ owner_id: currentUser.id,
         }
         .chip.active { background: #C99A3E; color: #16302B; border-color: #C99A3E; }
 
-        .qr-pattern {
-          margin: 16px auto 12px;
-          width: 112px;
-          height: 112px;
-          display: grid;
-          grid-template-columns: repeat(8, 1fr);
-          grid-template-rows: repeat(8, 1fr);
-          gap: 2px;
-          background: #16302B;
-          padding: 8px;
-          border-radius: 8px;
-        }
-        .qr-pattern .cell { background: transparent; border-radius: 1px; }
-        .qr-pattern .cell.on { background: #F1ECDA; }
-
         .url-chip {
           display: inline-flex;
           align-items: center;
@@ -641,11 +645,20 @@ owner_id: currentUser.id,
           justify-content: flex-end;
           align-items: center;
         }
-        .bar {
+        .bar-group {
           width: 100%;
-          max-width: 14px;
+          height: 100%;
+          display: flex;
+          align-items: flex-end;
+          justify-content: center;
+          gap: 1px;
+        }
+        .bar {
+          flex: 1;
+          min-width: 2px;
+          max-width: 5px;
           background: #C99A3E;
-          border-radius: 3px 3px 0 0;
+          border-radius: 2px 2px 0 0;
           transition: height 0.3s ease;
         }
         .bar-lbl {
@@ -654,6 +667,17 @@ owner_id: currentUser.id,
           color: #9FB3AC;
           margin-top: 5px;
         }
+        .bar-chart-legend {
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: center;
+          gap: 14px;
+          margin-top: 12px;
+          font-size: 10.5px;
+          color: #9FB3AC;
+        }
+        .legend-item { display: inline-flex; align-items: center; gap: 5px; }
+        .legend-dot { width: 8px; height: 8px; border-radius: 999px; display: inline-block; }
 
         .search-box {
           margin-top: 12px;
@@ -724,17 +748,39 @@ owner_id: currentUser.id,
           {!isLoggedIn && (
             <button className={"tab-btn" + (view === "cliente" ? " active" : "")} onClick={() => setView("cliente")}>Cliente</button>
           )}
-          {!isAdmin && (
+          {isLoggedIn && !isAdmin && (
             <button className={"tab-btn" + (view === "operatore" ? " active" : "")} onClick={() => setView("operatore")}>Operatore</button>
           )}
-          <button className={"tab-btn" + (view === "registrazione" ? " active" : "")} onClick={() => setView("registrazione")}>Crea Attività</button>
-          {(!isLoggedIn || isAdmin) && (
+          {isLoggedIn && (
+            <button className={"tab-btn" + (view === "registrazione" ? " active" : "")} onClick={() => setView("registrazione")}>Crea Attività</button>
+          )}
+          {isAdmin && (
             <button className={"tab-btn" + (view === "admin" ? " active" : "")} onClick={() => setView("admin")}>Admin</button>
           )}
           {isLoggedIn && (
             <button className="tab-btn" onClick={handleLogout}>Esci</button>
           )}
         </div>
+
+        {!isLoggedIn && (
+          <div style={{ textAlign: "center" }}>
+            <button
+              onClick={() => setView("operatore")}
+              style={{
+                background: "none",
+                border: "none",
+                color: "rgba(241,236,218,0.35)",
+                fontSize: 11.5,
+                marginTop: 14,
+                cursor: "pointer",
+                textDecoration: "underline",
+                textUnderlineOffset: "2px",
+              }}
+            >
+              Accesso operatore / admin
+            </button>
+          </div>
+        )}
 
         {(view === "operatore" || view === "statistiche") && isLoggedIn && (
           <div style={{ marginTop: 10, marginBottom: -6, display: "flex", gap: 8 }}>
@@ -756,7 +802,7 @@ owner_id: currentUser.id,
             <div className="board-panel">
               <div className="board-label">Nessuna attivita' selezionata</div>
               <p style={{ fontSize: 13, color: "#9FB3AC" }}>
-                Vai su "Registra" per crearne una nuova, oppure su "Admin" e scegli "Gestisci" su un'attivita' esistente.
+                Scansiona il QR code esposto nel locale per prendere il tuo numero. Sei il gestore di un'attivita'? Usa "Accesso operatore / admin" qui sopra.
               </p>
             </div>
           ) : myTicket === null ? (
@@ -792,7 +838,7 @@ owner_id: currentUser.id,
               </div>
               <div className="status-line" style={{ marginTop: 8 }}>
                 <span className="status-label">Attesa stimata</span>
-                <span className="status-value">~{position * avgWaitMin} min</span>
+                <span className="status-value">~{position * avgWaitToday} min</span>
               </div>
 
               {isMyTurn && (
@@ -871,13 +917,13 @@ owner_id: currentUser.id,
               <FlapNumber value={current} size="lg" />
 
               <div className="op-actions">
-                <button className="cta primary" onClick={avanti}>
+                <button className="cta primary" onClick={avanti} disabled={inCoda === 0}>
                   <ArrowRight size={16} /> Avanti
                 </button>
-                <button className="cta dark" onClick={richiama} title="Torna al numero precedente">
+                <button className="cta dark" onClick={richiama} disabled={current === 0} title="Torna al numero precedente">
                   <RotateCcw size={16} /> Richiama
                 </button>
-                <button className="cta dark" onClick={nonPresente} title="Il cliente non si e' presentato">
+                <button className="cta dark" onClick={nonPresente} disabled={inCoda === 0} title="Il cliente non si e' presentato">
                   <SkipForward size={16} /> Non presente
                 </button>
               </div>
@@ -892,7 +938,7 @@ owner_id: currentUser.id,
                   <div className="stat-lbl">Serviti oggi</div>
                 </div>
                 <div className="stat-box">
-                  <div className="stat-num">{avgWaitMin}m</div>
+                  <div className="stat-num">{avgWaitToday}m</div>
                   <div className="stat-lbl">Attesa media</div>
                 </div>
                 <div className="stat-box">
@@ -911,28 +957,27 @@ owner_id: currentUser.id,
 
               <div className="stats-divider" />
 
-              <div className="board-label"><BarChart3 size={13} style={{ display: "inline", marginRight: 6, position: "relative", top: -1 }} />Statistiche</div>
-
-              <div className="tabs" style={{ marginTop: 0 }}>
-                <button className={"tab-btn" + (statsPeriod === "giorno" ? " active" : "")} onClick={() => setStatsPeriod("giorno")}>Giorno</button>
-                <button className={"tab-btn" + (statsPeriod === "mese" ? " active" : "")} onClick={() => setStatsPeriod("mese")}>Mese</button>
-                <button className={"tab-btn" + (statsPeriod === "anno" ? " active" : "")} onClick={() => setStatsPeriod("anno")}>Anno</button>
-              </div>
-
-              <div className="stat-grid" style={{ gridTemplateColumns: "repeat(2, 1fr)", marginTop: 14 }}>
-                <div className="stat-box">
-                  <div className="stat-num">{statsServiti}</div>
-                  <div className="stat-lbl">Serviti nel periodo</div>
-                </div>
-                <div className="stat-box">
-                  <div className="stat-num">{avgWaitMin}m</div>
-                  <div className="stat-lbl">Attesa media</div>
-                </div>
-              </div>
-
-              <MiniBarChart data={CHART_DATA[statsPeriod].data} labels={CHART_DATA[statsPeriod].labels} />
+              <div className="board-label"><BarChart3 size={13} style={{ display: "inline", marginRight: 6, position: "relative", top: -1 }} />Andamento oggi — persone</div>
+              <MiniBarChart
+                labels={andamentoGiorno.labels}
+                series={[
+                  { name: "Serviti", data: andamentoGiorno.serviti, color: "#C99A3E" },
+                  { name: "Non presentati", data: andamentoGiorno.nonPresentati, color: "#B7472A" },
+                ]}
+              />
               <p style={{ fontSize: 11, color: "#9FB3AC", marginTop: 10, textAlign: "center" }}>
-                Andamento — grafico dimostrativo, il totale sopra e' reale
+                Per fascia oraria di oggi
+              </p>
+
+              <div className="board-label" style={{ marginTop: 18 }}>Andamento oggi — attesa media (min)</div>
+              <MiniBarChart
+                labels={andamentoGiorno.labels}
+                series={[
+                  { name: "Attesa media (min)", data: andamentoGiorno.attesaMedia, color: "#5C87A6" },
+                ]}
+              />
+              <p style={{ fontSize: 11, color: "#9FB3AC", marginTop: 10, textAlign: "center" }}>
+                Per fascia oraria di oggi
               </p>
             </div>
           )
@@ -994,10 +1039,60 @@ owner_id: currentUser.id,
           <Login onLoginSuccess={(user) => setCurrentUser(user)} />
         ) : view === "statistiche" ? (
           <div className="board-panel">
-            <div className="board-label"><BarChart3 size={13} style={{ display: "inline", marginRight: 6, position: "relative", top: -1 }} />Statistiche</div>
-            <p style={{ fontSize: 13, color: "#9FB3AC", marginTop: 10 }}>
-              Sezione in costruzione.
-            </p>
+            <div className="board-label"><BarChart3 size={13} style={{ display: "inline", marginRight: 6, position: "relative", top: -1 }} />
+              {activeBusiness ? activeBusiness.name : "Statistiche"}
+            </div>
+            {!activeBusiness ? (
+              <p style={{ fontSize: 13, color: "#9FB3AC", marginTop: 10 }}>
+                Seleziona un'attivita' da "Le mie attivita'" per vederne le statistiche.
+              </p>
+            ) : (
+              <>
+                <div className="tabs" style={{ marginTop: 12 }}>
+                  <button className={"tab-btn" + (statsPeriodPage === "giorno" ? " active" : "")} onClick={() => setStatsPeriodPage("giorno")}>Giorno</button>
+                  <button className={"tab-btn" + (statsPeriodPage === "settimana" ? " active" : "")} onClick={() => setStatsPeriodPage("settimana")}>Settimana</button>
+                  <button className={"tab-btn" + (statsPeriodPage === "mese" ? " active" : "")} onClick={() => setStatsPeriodPage("mese")}>Mese</button>
+                  <button className={"tab-btn" + (statsPeriodPage === "anno" ? " active" : "")} onClick={() => setStatsPeriodPage("anno")}>Anno</button>
+                </div>
+                <div className="stat-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)", marginTop: 14 }}>
+                  <div className="stat-box">
+                    <div className="stat-num">{statsData.serviti}</div>
+                    <div className="stat-lbl">Serviti</div>
+                  </div>
+                  <div className="stat-box">
+                    <div className="stat-num">{statsData.attesaMedia}m</div>
+                    <div className="stat-lbl">Attesa media</div>
+                  </div>
+                  <div className="stat-box">
+                    <div className="stat-num" style={{ color: "#B7472A" }}>{statsData.nonPresentati}</div>
+                    <div className="stat-lbl">Non presentati</div>
+                  </div>
+                </div>
+
+                <div className="board-label" style={{ marginTop: 4 }}>Persone</div>
+                <MiniBarChart
+                  labels={andamentoStats.labels}
+                  series={[
+                    { name: "Serviti", data: andamentoStats.serviti, color: "#C99A3E" },
+                    { name: "Non presentati", data: andamentoStats.nonPresentati, color: "#B7472A" },
+                  ]}
+                />
+                <p style={{ fontSize: 11, color: "#9FB3AC", marginTop: 10, textAlign: "center" }}>
+                  Per fascia del periodo selezionato
+                </p>
+
+                <div className="board-label" style={{ marginTop: 18 }}>Attesa media (min)</div>
+                <MiniBarChart
+                  labels={andamentoStats.labels}
+                  series={[
+                    { name: "Attesa media (min)", data: andamentoStats.attesaMedia, color: "#5C87A6" },
+                  ]}
+                />
+                <p style={{ fontSize: 11, color: "#9FB3AC", marginTop: 10, textAlign: "center" }}>
+                  Per fascia del periodo selezionato
+                </p>
+              </>
+            )}
           </div>
         ) : (
           <div className="board-panel">

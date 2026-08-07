@@ -18,57 +18,139 @@ export async function prendiNumero(businessId) {
 
 // --- Operatore: avanti ---------------------------------------------------
 export async function avanti(businessId) {
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("current")
-    .eq("id", businessId)
-    .single();
-
-  const nextCurrent = business.current + 1;
-
-  await supabase.from("businesses").update({ current: nextCurrent }).eq("id", businessId);
-  await supabase
-    .from("tickets")
-    .update({ status: "servito" })
-    .eq("business_id", businessId)
-    .eq("number", nextCurrent);
+  const { data, error } = await supabase.rpc("avanza_numero_atomico", {
+    business_id_input: businessId,
+  });
+  if (error) throw error;
+  return data;
 }
 
 // --- Operatore: richiama (torna indietro di un numero) -------------------
 export async function richiama(businessId) {
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("current")
-    .eq("id", businessId)
-    .single();
-
-  if (business.current <= 0) return;
-  const prevCurrent = business.current - 1;
-
-  await supabase.from("businesses").update({ current: prevCurrent }).eq("id", businessId);
-  await supabase
-    .from("tickets")
-    .update({ status: "in_attesa" })
-    .eq("business_id", businessId)
-    .eq("number", business.current);
+  const { data, error } = await supabase.rpc("richiama_numero_atomico", {
+    business_id_input: businessId,
+  });
+  if (error) throw error;
+  return data;
 }
 
 // --- Operatore: non presente ---------------------------------------------
 export async function nonPresente(businessId) {
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("current")
-    .eq("id", businessId)
-    .single();
+  const { data, error } = await supabase.rpc("non_presente_atomico", {
+    business_id_input: businessId,
+  });
+  if (error) throw error;
+  return data;
+}
 
-  const nextCurrent = business.current + 1;
+// --- Statistiche: conteggi + attesa media per periodo (pagina Statistiche) --
+function dataInizioPeriodo(periodo) {
+  const now = new Date();
+  if (periodo === "giorno") return new Date(now.setHours(0, 0, 0, 0));
+  if (periodo === "settimana") {
+    const giorno = now.getDay() === 0 ? 7 : now.getDay();
+    const lunedi = new Date(now);
+    lunedi.setDate(now.getDate() - giorno + 1);
+    lunedi.setHours(0, 0, 0, 0);
+    return lunedi;
+  }
+  if (periodo === "mese") return new Date(now.getFullYear(), now.getMonth(), 1);
+  return new Date(now.getFullYear(), 0, 1);
+}
 
-  await supabase.from("businesses").update({ current: nextCurrent }).eq("id", businessId);
-  await supabase
+export async function statisticheComplete(businessId, periodo) {
+  const from = dataInizioPeriodo(periodo).toISOString();
+
+  const { count: serviti } = await supabase
     .from("tickets")
-    .update({ status: "non_presentato" })
+    .select("*", { count: "exact", head: true })
     .eq("business_id", businessId)
-    .eq("number", nextCurrent);
+    .eq("status", "servito")
+    .gte("created_at", from);
+
+  const { count: nonPresentati } = await supabase
+    .from("tickets")
+    .select("*", { count: "exact", head: true })
+    .eq("business_id", businessId)
+    .eq("status", "non_presentato")
+    .gte("created_at", from);
+
+  const { data: ticketServiti } = await supabase
+    .from("tickets")
+    .select("created_at, served_at")
+    .eq("business_id", businessId)
+    .eq("status", "servito")
+    .not("served_at", "is", null)
+    .gte("created_at", from);
+
+  let attesaMedia = 0;
+  if (ticketServiti && ticketServiti.length > 0) {
+    const totaleMinuti = ticketServiti.reduce((acc, t) => {
+      const diffMs = new Date(t.served_at) - new Date(t.created_at);
+      return acc + diffMs / 60000;
+    }, 0);
+    attesaMedia = Math.round(totaleMinuti / ticketServiti.length);
+  }
+
+  return {
+    serviti: serviti || 0,
+    nonPresentati: nonPresentati || 0,
+    attesaMedia,
+  };
+}
+
+// --- Statistiche: andamento reale per il grafico (serviti / non presentati /
+// attesa media per fascia oraria, giorno della settimana, giorno del mese o mese) --
+function bucketPerPeriodo(periodo) {
+  if (periodo === "giorno") {
+    const labels = ["9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20"];
+    return { labels, indiceDi: (d) => labels.indexOf(String(d.getHours())) };
+  }
+  if (periodo === "settimana") {
+    const labels = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
+    return { labels, indiceDi: (d) => { const g = d.getDay(); return g === 0 ? 6 : g - 1; } };
+  }
+  if (periodo === "mese") {
+    const labels = Array.from({ length: 30 }, (_, i) => String(i + 1));
+    return { labels, indiceDi: (d) => { const g = d.getDate(); return g >= 1 && g <= 30 ? g - 1 : -1; } };
+  }
+  const labels = ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"];
+  return { labels, indiceDi: (d) => d.getMonth() };
+}
+
+export async function andamentoPeriodo(businessId, periodo) {
+  const from = dataInizioPeriodo(periodo).toISOString();
+
+  const { data, error } = await supabase
+    .from("tickets")
+    .select("status, created_at, served_at")
+    .eq("business_id", businessId)
+    .gte("created_at", from);
+  if (error) throw error;
+
+  const { labels, indiceDi } = bucketPerPeriodo(periodo);
+  const serviti = labels.map(() => 0);
+  const nonPresentati = labels.map(() => 0);
+  const sommaAttesaMin = labels.map(() => 0);
+  const conteggioAttesa = labels.map(() => 0);
+
+  data.forEach((t) => {
+    const idx = indiceDi(new Date(t.created_at));
+    if (idx === -1 || idx === undefined) return;
+    if (t.status === "servito") {
+      serviti[idx]++;
+      if (t.served_at) {
+        sommaAttesaMin[idx] += (new Date(t.served_at) - new Date(t.created_at)) / 60000;
+        conteggioAttesa[idx]++;
+      }
+    } else if (t.status === "non_presentato") {
+      nonPresentati[idx]++;
+    }
+  });
+
+  const attesaMedia = labels.map((_, i) => (conteggioAttesa[i] ? Math.round(sommaAttesaMin[i] / conteggioAttesa[i]) : 0));
+
+  return { labels, serviti, nonPresentati, attesaMedia };
 }
 
 // --- Statistiche: conteggi per periodo ------------------------------------
