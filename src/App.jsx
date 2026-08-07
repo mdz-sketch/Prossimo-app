@@ -105,10 +105,20 @@ const [currentUser, setCurrentUser] = useState(null);
   const isAdmin = currentUser?.user_metadata?.role === "admin";
   const [recuperoPassword, setRecuperoPassword] = useState(false);
 
+  // Ripristina la sessione gia' attiva (es. dopo un refresh della pagina):
+  // Supabase mantiene il token in localStorage, ma senza questo lo stato
+  // dell'app perdeva comunque il login ad ogni ricaricamento.
   useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) setCurrentUser(session.user);
+    });
+
     const { data: listener } = supabase.auth.onAuthStateChange((event) => {
       if (event === "PASSWORD_RECOVERY") {
         setRecuperoPassword(true);
+      }
+      if (event === "SIGNED_OUT") {
+        setCurrentUser(null);
       }
     });
     return () => listener.subscription.unsubscribe();
@@ -194,6 +204,9 @@ const handleLogout = async () => {
   const [formType, setFormType] = useState("Pizzeria");
   const [errore, setErrore] = useState("");
 
+  // Finche' non ci sono ancora dati storici sufficienti (attivita' nuova,
+  // nessuno ancora servito oggi), usa una stima prudente invece di "0 min".
+  const avgWaitStimata = avgWaitToday > 0 ? avgWaitToday : 3;
   const current = activeBusiness?.current ?? 0;
   const lastIssued = activeBusiness?.last_issued ?? 0;
   const inCoda = Math.max(lastIssued - current, 0);
@@ -872,7 +885,7 @@ owner_id: currentUser.id,
               </div>
               <div className="status-line" style={{ marginTop: 8 }}>
                 <span className="status-label">Attesa stimata</span>
-                <span className="status-value">~{position * avgWaitToday} min</span>
+                <span className="status-value">~{position * avgWaitStimata} min</span>
               </div>
 
               {isMyTurn && (
