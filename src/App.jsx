@@ -3,6 +3,7 @@ import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "./lib/supabaseClient";
 import Login from "./components/Login";
+import ImpostaNuovaPassword from "./components/ImpostaNuovaPassword";
 import {
   prendiNumero as prendiNumeroSupabase,
   avanti as avantiSupabase,
@@ -102,6 +103,16 @@ export default function App() {
 const [currentUser, setCurrentUser] = useState(null);
   const isLoggedIn = currentUser !== null;
   const isAdmin = currentUser?.user_metadata?.role === "admin";
+  const [recuperoPassword, setRecuperoPassword] = useState(false);
+
+  useEffect(() => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") {
+        setRecuperoPassword(true);
+      }
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
 const handleCondividi = async (business) => {
     const url = `${window.location.origin}/coda/${business.slug}`;
     if (navigator.share) {
@@ -744,6 +755,16 @@ owner_id: currentUser.id,
       <div className="wrap">
         <div className="wordmark"><span className="dot" />Prossimo</div>
 
+        {recuperoPassword ? (
+          <ImpostaNuovaPassword
+            onCompletato={(user) => {
+              setCurrentUser(user);
+              setRecuperoPassword(false);
+              setView("operatore");
+            }}
+          />
+        ) : (
+        <>
         <div className="tabs">
           {!isLoggedIn && (
             <button className={"tab-btn" + (view === "cliente" ? " active" : "")} onClick={() => setView("cliente")}>Cliente</button>
@@ -1182,6 +1203,8 @@ owner_id: currentUser.id,
           <CheckCircle2 size={12} style={{ display: "inline", marginRight: 4, position: "relative", top: -1 }} />
           Collegato a Supabase — dati reali e sincronizzati in tempo reale
         </div>
+        </>
+        )}
       </div>
     </div>
   );
