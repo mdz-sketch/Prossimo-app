@@ -142,6 +142,19 @@ const handleLogout = async () => {
     await supabase.auth.signOut();
     setCurrentUser(null);
     setView("cliente");
+    setActiveBusiness(null);
+    localStorage.removeItem("prossimo_active_business_id");
+  };
+
+  // Se nel browser era rimasta selezionata (via localStorage) l'attivita'
+  // di un altro utente, il login non deve ereditarla: si riparte da
+  // "Le mie attivita'" pulite per l'account appena entrato.
+  const handleLoginSuccess = (user) => {
+    setCurrentUser(user);
+    if (activeBusiness && activeBusiness.owner_id !== user.id) {
+      setActiveBusiness(null);
+      localStorage.removeItem("prossimo_active_business_id");
+    }
   };
 
   // Attivita' attualmente "attiva" per le viste Cliente/Operatore.
@@ -758,7 +771,7 @@ owner_id: currentUser.id,
         {recuperoPassword ? (
           <ImpostaNuovaPassword
             onCompletato={(user) => {
-              setCurrentUser(user);
+              handleLoginSuccess(user);
               setRecuperoPassword(false);
               setView("operatore");
             }}
@@ -887,7 +900,7 @@ owner_id: currentUser.id,
           )
          ) : view === "operatore" ? (
           !isLoggedIn ? (
-            <Login onLoginSuccess={(user) => setCurrentUser(user)} />
+            <Login onLoginSuccess={handleLoginSuccess} />
           ) : !activeBusiness ? (
             <div className="board-panel">
               <div className="board-label">Le tue attivita'</div>
@@ -1004,7 +1017,7 @@ owner_id: currentUser.id,
           )
         ) : view === "admin" ? (
           !isAdmin ? (
-            <Login onLoginSuccess={(user) => setCurrentUser(user)} />
+            <Login onLoginSuccess={handleLoginSuccess} />
           ) : (
           <div className="board-panel">
             <button className="cta ghost" style={{ marginBottom: 12 }} onClick={() => setView("statistiche")}>Statistiche</button>
@@ -1057,7 +1070,7 @@ owner_id: currentUser.id,
           </div>
           )
         ) : !isLoggedIn ? (
-          <Login onLoginSuccess={(user) => setCurrentUser(user)} />
+          <Login onLoginSuccess={handleLoginSuccess} />
         ) : view === "statistiche" ? (
           <div className="board-panel">
             <div className="board-label"><BarChart3 size={13} style={{ display: "inline", marginRight: 6, position: "relative", top: -1 }} />
