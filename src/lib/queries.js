@@ -170,15 +170,58 @@ export async function statisticheServiti(businessId, periodo) {
   if (error) throw error;
   return count;
 }
-// --- Operatore: le mie attivita' -----------------------------------------
-export async function mieAttivita(ownerId) {
-  const { data, error } = await supabase
+// --- Operatore: le mie attivita' (possedute + quelle a cui si e' stati
+// invitati come staff) -----------------------------------------------------
+export async function mieAttivita(userId) {
+  const { data: possedute, error: errPossedute } = await supabase
     .from("businesses")
     .select("*")
-    .eq("owner_id", ownerId);
-  if (error) throw error;
-  return data;
+    .eq("owner_id", userId);
+  if (errPossedute) throw errPossedute;
+
+  const { data: staffRows, error: errStaff } = await supabase
+    .from("business_staff")
+    .select("business_id")
+    .eq("user_id", userId);
+  if (errStaff) throw errStaff;
+
+  const idAssegnati = (staffRows || []).map((r) => r.business_id);
+  let assegnate = [];
+  if (idAssegnati.length > 0) {
+    const { data, error } = await supabase
+      .from("businesses")
+      .select("*")
+      .in("id", idAssegnati);
+    if (error) throw error;
+    assegnate = data;
+  }
+
+  return [
+    ...possedute.map((b) => ({ ...b, ruolo: "proprietario" })),
+    ...assegnate.map((b) => ({ ...b, ruolo: "operatore" })),
+  ];
 }
+
+// --- Operatore: entra in un'attivita' tramite codice invito ---------------
+export async function unisciAttivita(inviteCode, userId) {
+  const { data: business, error: errFind } = await supabase
+    .from("businesses")
+    .select("id, name")
+    .eq("invite_code", inviteCode.trim())
+    .single();
+  if (errFind || !business) throw new Error("Codice invito non valido");
+
+  const { error: errInsert } = await supabase
+    .from("business_staff")
+    .insert({ business_id: business.id, user_id: userId });
+  if (errInsert) {
+    if (errInsert.code === "23505") throw new Error("Sei gia' staff di questa attivita'");
+    throw errInsert;
+  }
+
+  return business;
+}
+
 export async function eliminaAttivita(businessId) {
   const { error } = await supabase
     .from("businesses")
