@@ -14,6 +14,7 @@ import {
   andamentoPeriodo,
   cercaAttivita,
   mieAttivita,
+  unisciAttivita,
   eliminaAttivita,
   ascoltaAggiornamenti,
 } from "./lib/queries";
@@ -102,7 +103,10 @@ export default function App() {
   const [view, setView] = useState("cliente");
 const [currentUser, setCurrentUser] = useState(null);
   const isLoggedIn = currentUser !== null;
-  const isAdmin = currentUser?.user_metadata?.role === "admin";
+  // app_metadata (a differenza di user_metadata) non e' modificabile
+  // dall'utente stesso: puo' essere impostato solo via SQL/dashboard con
+  // permessi elevati, quindi e' l'unico posto sicuro da cui leggere il ruolo.
+  const isAdmin = currentUser?.app_metadata?.role === "admin";
   const [recuperoPassword, setRecuperoPassword] = useState(false);
 
   // Ripristina la sessione gia' attiva (es. dopo un refresh della pagina):
@@ -134,6 +138,19 @@ const handleCondividi = async (business) => {
     } else {
       navigator.clipboard.writeText(url);
       alert("Link copiato negli appunti!");
+    }
+  };
+const handleCondividiInvito = async (business) => {
+    const url = `${window.location.origin}/unisciti/${business.invite_code}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: business.name, text: `Unisciti come operatore per ${business.name}`, url });
+      } catch {
+        // utente ha annullato la condivisione, nessun errore da mostrare
+      }
+    } else {
+      navigator.clipboard.writeText(url);
+      alert("Link invito copiato negli appunti!");
     }
   };
 const handleElimina = async (business) => {
@@ -172,12 +189,37 @@ const handleLogout = async () => {
   // "Gestisci" da un'attivita' esistente nel pannello Admin.
   const [activeBusiness, setActiveBusiness] = useState(null);
   const [mieAttivitaList, setMieAttivitaList] = useState([]);
+  const [codiceInvito, setCodiceInvito] = useState("");
+  const [erroreInvito, setErroreInvito] = useState("");
+  const [invitoInCorso, setInvitoInCorso] = useState(false);
+  const [attivitaDaInvitare, setAttivitaDaInvitare] = useState(null);
+
+  const ricaricaMieAttivita = () => {
+    if (currentUser) mieAttivita(currentUser.id).then(setMieAttivitaList).catch(console.error);
+  };
 
   useEffect(() => {
     if (view === "operatore" && isLoggedIn && !activeBusiness) {
-      mieAttivita(currentUser.id).then(setMieAttivitaList).catch(console.error);
+      ricaricaMieAttivita();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, isLoggedIn, activeBusiness, currentUser]);
+
+  const handleUnisciAttivita = async (e) => {
+    e.preventDefault();
+    if (!codiceInvito.trim()) return;
+    setErroreInvito("");
+    setInvitoInCorso(true);
+    try {
+      await unisciAttivita(codiceInvito, currentUser.id);
+      setCodiceInvito("");
+      ricaricaMieAttivita();
+    } catch (e2) {
+      setErroreInvito(e2.message);
+    } finally {
+      setInvitoInCorso(false);
+    }
+  };
 
   const [myTicket, setMyTicket] = useState(null);
   const [pulse, setPulse] = useState(false);
@@ -222,6 +264,16 @@ const handleLogout = async () => {
       return () => clearTimeout(t);
     }
   }, [isMyTurn]);
+
+  // Link di invito operatore (/unisciti/<codice>): precompila il campo,
+  // l'utente deve comunque essere loggato e confermare per unirsi.
+  useEffect(() => {
+    const pathParts = window.location.pathname.split("/").filter(Boolean);
+    if (pathParts[0] === "unisciti" && pathParts[1]) {
+      setCodiceInvito(pathParts[1]);
+      setView("operatore");
+    }
+  }, []);
 
   // Al primo avvio, se c'era un'attivita' scelta in precedenza, la ricarica
   useEffect(() => {
@@ -919,7 +971,7 @@ owner_id: currentUser.id,
               <div className="board-label">Le tue attivita'</div>
               {mieAttivitaList.length === 0 ? (
                 <p style={{ fontSize: 13, color: "#9FB3AC" }}>
-                  Non hai ancora nessuna attivita'. Vai su "Crea Attività" per crearne una.
+                  Non hai ancora nessuna attivita'. Vai su "Crea Attività" per crearne una, oppure inserisci un codice invito qui sotto.
                 </p>
               ) : (
                 <div className="admin-list">
@@ -930,19 +982,67 @@ owner_id: currentUser.id,
                           <div className="admin-card-name">{b.name}</div>
                           <div className="admin-card-type"><Tag size={11} /> {b.type}</div>
                         </div>
+                        <span className="queue-chip">{b.ruolo === "proprietario" ? "Tua" : "Gestita per conto di"}</span>
                       </div>
+
+                      {attivitaDaInvitare === b.id && b.ruolo === "proprietario" && (
+                        <div style={{ marginTop: 10, padding: 10, background: "#16302B", borderRadius: 10 }}>
+                          <div style={{ fontSize: 11, color: "#9FB3AC", marginBottom: 6 }}>Codice invito operatore</div>
+                          <div className="url-chip">{b.invite_code}</div>
+                          <button
+                            className="cta ghost"
+                            style={{ fontSize: 12, padding: "6px 10px", marginTop: 8 }}
+                            onClick={() => handleCondividiInvito(b)}
+                          >
+                            Condividi link invito
+                          </button>
+                        </div>
+                      )}
+
                      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                     <button className="cta dark" style={{ flex: 1 }} onClick={() => { selezionaAttivita(b); setView("operatore"); }}>
                       Gestisci
                     </button>
-                    <button className="cta" style={{ flex: 1, background: "#C0392B", color: "#F1ECDA", border: "none" }} onClick={() => handleElimina(b)}>
-                      Elimina
-                    </button>
+                    {b.ruolo === "proprietario" && (
+                      <button
+                        className="cta dark"
+                        style={{ flex: 1 }}
+                        onClick={() => setAttivitaDaInvitare(attivitaDaInvitare === b.id ? null : b.id)}
+                      >
+                        Invita
+                      </button>
+                    )}
+                    {b.ruolo === "proprietario" && (
+                      <button className="cta" style={{ flex: 1, background: "#C0392B", color: "#F1ECDA", border: "none" }} onClick={() => handleElimina(b)}>
+                        Elimina
+                      </button>
+                    )}
                   </div>
                     </div>
                   ))}
                 </div>
               )}
+
+              <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid rgba(241,236,218,0.12)" }}>
+                <label className="field-label" style={{ marginTop: 0 }}>Hai un codice invito?</label>
+                <form onSubmit={handleUnisciAttivita} style={{ display: "flex", gap: 8 }}>
+                  <input
+                    className="field-input"
+                    placeholder="Codice invito"
+                    value={codiceInvito}
+                    onChange={(e) => setCodiceInvito(e.target.value)}
+                  />
+                  <button
+                    className="cta dark"
+                    type="submit"
+                    disabled={invitoInCorso || !codiceInvito.trim()}
+                    style={{ marginTop: 0, width: "auto", padding: "0 16px", flexShrink: 0 }}
+                  >
+                    {invitoInCorso ? "..." : "Entra"}
+                  </button>
+                </form>
+                {erroreInvito && <p style={{ color: "#B7472A", fontSize: 12, marginTop: 6 }}>{erroreInvito}</p>}
+              </div>
             </div>
           ) : (
             <div className="board-panel">
