@@ -303,11 +303,21 @@ const handleLogout = async () => {
         .select("*")
         .eq("slug", slugFromUrl)
         .single()
-        .then(({ data }) => {
-          if (data) {
-            setActiveBusiness(data);
-            localStorage.setItem("prossimo_active_business_id", data.id);
-            setView("cliente");
+        .then(async ({ data }) => {
+          if (!data) return;
+          setActiveBusiness(data);
+          localStorage.setItem("prossimo_active_business_id", data.id);
+          setView("cliente");
+
+          // Arrivare su questa pagina significa che il QR e' gia' stato
+          // scansionato davvero: il numero si prende subito, senza un
+          // ulteriore tocco da parte del cliente.
+          try {
+            const n = await prendiNumeroSupabase(data.id);
+            setMyTicket(n);
+            setActiveBusiness((b) => (b ? { ...b, last_issued: n } : b));
+          } catch (e) {
+            setErrore(e.message);
           }
         });
       return;
@@ -958,10 +968,10 @@ owner_id: currentUser.id,
                 <QrCode size={64} color="#16302B" style={{ margin: "0 auto" }} />
               </div>
               <p style={{ fontSize: 13, color: "rgba(22,48,43,0.65)", marginTop: 10 }}>
-                Inquadra il QR code all'ingresso per prendere il tuo numero.
+                Tocca il pulsante per prendere il tuo numero.
               </p>
               <button className="cta primary" onClick={prendiNumero}>
-                Simula scansione QR <ArrowRight size={16} />
+                Prendi il tuo numero <ArrowRight size={16} />
               </button>
             </div>
           ) : (
