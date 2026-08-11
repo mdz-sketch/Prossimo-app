@@ -51,12 +51,15 @@ export async function numeroBaseOggi(businessId) {
   const oggiInizio = new Date();
   oggiInizio.setHours(0, 0, 0, 0);
 
+  // Ordina per "number" (non per created_at): sono normalmente coerenti,
+  // ma se una fonte esterna avesse inserito ticket fuori ordine cronologico
+  // il numero più alto resta comunque la base corretta da sottrarre.
   const { data, error } = await supabase
     .from("tickets")
     .select("number")
     .eq("business_id", businessId)
     .lt("created_at", oggiInizio.toISOString())
-    .order("created_at", { ascending: false })
+    .order("number", { ascending: false })
     .limit(1);
   if (error) throw error;
 
