@@ -111,8 +111,10 @@ function bucketPerPeriodo(periodo) {
     return { labels, indiceDi: (d) => { const g = d.getDay(); return g === 0 ? 6 : g - 1; } };
   }
   if (periodo === "mese") {
-    const labels = Array.from({ length: 30 }, (_, i) => String(i + 1));
-    return { labels, indiceDi: (d) => { const g = d.getDate(); return g >= 1 && g <= 30 ? g - 1 : -1; } };
+    const oggi = new Date();
+    const giorniInMese = new Date(oggi.getFullYear(), oggi.getMonth() + 1, 0).getDate();
+    const labels = Array.from({ length: giorniInMese }, (_, i) => String(i + 1));
+    return { labels, indiceDi: (d) => { const g = d.getDate(); return g >= 1 && g <= giorniInMese ? g - 1 : -1; } };
   }
   const labels = ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"];
   return { labels, indiceDi: (d) => d.getMonth() };
