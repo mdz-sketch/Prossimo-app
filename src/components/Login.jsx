@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import PasswordInput from './PasswordInput';
 
 export default function Login({ onLoginSuccess }) {
   const [modalita, setModalita] = useState('login'); // 'login' | 'recupero' | 'registrazione'
@@ -151,23 +152,11 @@ export default function Login({ onLoginSuccess }) {
             </div>
             <div style={{ marginBottom: 12 }}>
               <label>Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                style={{ width: '100%', padding: 8 }}
-              />
+              <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} required />
             </div>
             <div style={{ marginBottom: 12 }}>
               <label>Conferma password</label>
-              <input
-                type="password"
-                value={confermaPassword}
-                onChange={(e) => setConfermaPassword(e.target.value)}
-                required
-                style={{ width: '100%', padding: 8 }}
-              />
+              <PasswordInput value={confermaPassword} onChange={(e) => setConfermaPassword(e.target.value)} required />
             </div>
             {errore && <p style={{ color: 'red' }}>{errore}</p>}
             <button type="submit" disabled={caricamento} style={{ width: '100%', padding: 10 }}>
@@ -198,13 +187,7 @@ export default function Login({ onLoginSuccess }) {
         </div>
         <div style={{ marginBottom: 12 }}>
           <label>Password</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            style={{ width: '100%', padding: 8 }}
-          />
+          <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} required />
         </div>
         {errore && <p style={{ color: 'red' }}>{errore}</p>}
         <button type="submit" disabled={caricamento} style={{ width: '100%', padding: 10 }}>
