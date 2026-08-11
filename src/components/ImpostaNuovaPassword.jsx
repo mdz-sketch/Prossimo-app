@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import PasswordInput from './PasswordInput';
 
 export default function ImpostaNuovaPassword({ onCompletato }) {
   const [password, setPassword] = useState('');
@@ -38,23 +39,11 @@ export default function ImpostaNuovaPassword({ onCompletato }) {
       <form onSubmit={handleSubmit}>
         <div style={{ marginBottom: 12 }}>
           <label>Nuova password</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            style={{ width: '100%', padding: 8 }}
-          />
+          <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} required />
         </div>
         <div style={{ marginBottom: 12 }}>
           <label>Conferma nuova password</label>
-          <input
-            type="password"
-            value={conferma}
-            onChange={(e) => setConferma(e.target.value)}
-            required
-            style={{ width: '100%', padding: 8 }}
-          />
+          <PasswordInput value={conferma} onChange={(e) => setConferma(e.target.value)} required />
         </div>
         {errore && <p style={{ color: 'red' }}>{errore}</p>}
         <button type="submit" disabled={caricamento} style={{ width: '100%', padding: 10 }}>
