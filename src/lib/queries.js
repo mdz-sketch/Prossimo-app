@@ -143,9 +143,12 @@ export async function statisticheComplete(businessId, periodo, offset = 0) {
 
 // --- Statistiche: andamento reale per il grafico (serviti / non presentati /
 // attesa media per fascia oraria, giorno della settimana, giorno del mese o mese) --
-function bucketPerPeriodo(periodo, offset = 0) {
+// oraApertura/oraChiusura sono la fascia oraria configurata sull'attivita'
+// (default 9-20 per compatibilita' con le attivita' create prima di questo campo).
+function bucketPerPeriodo(periodo, offset = 0, oraApertura = 9, oraChiusura = 20) {
   if (periodo === "giorno") {
-    const labels = ["9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20"];
+    const labels = [];
+    for (let h = oraApertura; h <= oraChiusura; h++) labels.push(String(h));
     return { labels, indiceDi: (d) => labels.indexOf(String(d.getHours())) };
   }
   if (periodo === "settimana") {
@@ -162,7 +165,7 @@ function bucketPerPeriodo(periodo, offset = 0) {
   return { labels, indiceDi: (d) => d.getMonth() };
 }
 
-export async function andamentoPeriodo(businessId, periodo, offset = 0) {
+export async function andamentoPeriodo(businessId, periodo, offset = 0, oraApertura = 9, oraChiusura = 20) {
   const from = dataInizioPeriodo(periodo, offset).toISOString();
   const to = dataFinePeriodo(periodo, offset).toISOString();
 
@@ -174,7 +177,7 @@ export async function andamentoPeriodo(businessId, periodo, offset = 0) {
     .lt("created_at", to);
   if (error) throw error;
 
-  const { labels, indiceDi } = bucketPerPeriodo(periodo, offset);
+  const { labels, indiceDi } = bucketPerPeriodo(periodo, offset, oraApertura, oraChiusura);
   const serviti = labels.map(() => 0);
   const nonPresentati = labels.map(() => 0);
   const sommaAttesaMin = labels.map(() => 0);

@@ -242,8 +242,14 @@ const handleLogout = async () => {
   useEffect(() => {
     if (view !== "statistiche" || !activeBusiness?.id) return;
     statisticheComplete(activeBusiness.id, statsPeriodPage, statsOffset).then(setStatsData).catch(console.error);
-    andamentoPeriodo(activeBusiness.id, statsPeriodPage, statsOffset).then(setAndamentoStats).catch(console.error);
-  }, [view, activeBusiness?.id, statsPeriodPage, statsOffset]);
+    andamentoPeriodo(
+      activeBusiness.id,
+      statsPeriodPage,
+      statsOffset,
+      activeBusiness.ora_apertura,
+      activeBusiness.ora_chiusura
+    ).then(setAndamentoStats).catch(console.error);
+  }, [view, activeBusiness?.id, activeBusiness?.ora_apertura, activeBusiness?.ora_chiusura, statsPeriodPage, statsOffset]);
 
   const [registered, setRegistered] = useState(false);
   const [businesses, setBusinesses] = useState([]);
@@ -251,6 +257,8 @@ const handleLogout = async () => {
   const [formName, setFormName] = useState("");
   const [formAddress, setFormAddress] = useState("");
   const [formType, setFormType] = useState("Pizzeria");
+  const [formOraApertura, setFormOraApertura] = useState(9);
+  const [formOraChiusura, setFormOraChiusura] = useState(20);
   const [errore, setErrore] = useState("");
 
   // Finche' non ci sono ancora dati storici sufficienti (attivita' nuova,
@@ -341,7 +349,13 @@ const handleLogout = async () => {
     setSkippedToday(count || 0);
     const oggi = await statisticheComplete(businessId, "giorno");
     setAvgWaitToday(oggi.attesaMedia);
-    andamentoPeriodo(businessId, "giorno").then(setAndamentoGiorno).catch(console.error);
+    andamentoPeriodo(
+      businessId,
+      "giorno",
+      0,
+      activeBusiness?.ora_apertura,
+      activeBusiness?.ora_chiusura
+    ).then(setAndamentoGiorno).catch(console.error);
   };
 
   useEffect(() => {
@@ -403,6 +417,10 @@ const handleLogout = async () => {
   // --- Registrazione ------------------------------------------------------
   const generaAttivita = async () => {
     if (!formName.trim()) return;
+    if (formOraChiusura <= formOraApertura) {
+      setErrore("L'orario di chiusura deve essere dopo quello di apertura");
+      return;
+    }
     setErrore("");
     const rand = Math.random().toString(16).slice(2, 6);
     const slug = `${slugify(formName) || "attivita"}-${rand}`;
@@ -415,6 +433,8 @@ const handleLogout = async () => {
         slug,
         current: 0,
         last_issued: 0,
+        ora_apertura: formOraApertura,
+        ora_chiusura: formOraChiusura,
 owner_id: currentUser.id,
       })
       .select()
@@ -434,6 +454,8 @@ owner_id: currentUser.id,
     setFormName("");
     setFormAddress("");
     setFormType("Pizzeria");
+    setFormOraApertura(9);
+    setFormOraChiusura(20);
   };
 
   // --- Admin --------------------------------------------------------------
@@ -1316,6 +1338,29 @@ owner_id: currentUser.id,
                       {t}
                     </button>
                   ))}
+                </div>
+
+                <label className="field-label">Orario di lavoro</label>
+                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                  <select
+                    className="field-input"
+                    value={formOraApertura}
+                    onChange={(e) => setFormOraApertura(Number(e.target.value))}
+                  >
+                    {Array.from({ length: 24 }, (_, h) => h).map((h) => (
+                      <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>
+                    ))}
+                  </select>
+                  <span style={{ color: "#9FB3AC", fontSize: 13 }}>—</span>
+                  <select
+                    className="field-input"
+                    value={formOraChiusura}
+                    onChange={(e) => setFormOraChiusura(Number(e.target.value))}
+                  >
+                    {Array.from({ length: 24 }, (_, h) => h).map((h) => (
+                      <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>
+                    ))}
+                  </select>
                 </div>
 
                 <button className="cta primary" onClick={generaAttivita} disabled={!formName.trim()}>
