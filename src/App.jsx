@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, BarChart3, MapPin, Tag, ChevronLeft, ChevronRight, FileSpreadsheet, FileText } from "lucide-react";
+import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, BarChart3, MapPin, Tag, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Printer } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "./lib/supabaseClient";
 import Login from "./components/Login";
@@ -20,7 +20,7 @@ import {
   ascoltaAggiornamenti,
   numeroBaseOggi,
 } from "./lib/queries";
-import { esportaCsv, esportaPdf } from "./lib/export";
+import { esportaCsv, esportaPdf, apriQrPdf } from "./lib/export";
 
 function Flap({ char }) {
   const [display, setDisplay] = useState(char);
@@ -1115,9 +1115,14 @@ owner_id: currentUser.id,
                 />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 11.5, color: "#9FB3AC", marginBottom: 6 }}>QR della tua coda</div>
-                  <button className="cta ghost" style={{ fontSize: 12.5, padding: "6px 10px" }} onClick={() => handleCondividi(activeBusiness)}>
-                    Condividi link
-                  </button>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button className="cta ghost" style={{ fontSize: 12.5, padding: "6px 10px" }} onClick={() => handleCondividi(activeBusiness)}>
+                      Condividi link
+                    </button>
+                    <button className="cta ghost" style={{ fontSize: 12.5, padding: "6px 10px" }} onClick={() => apriQrPdf(activeBusiness)}>
+                      <Printer size={13} /> Stampa QR
+                    </button>
+                  </div>
                 </div>
               </div>
               <div className="board-label">{activeBusiness.name} — Ora in servizio</div>
@@ -1438,7 +1443,10 @@ owner_id: currentUser.id,
                   </p>
                 </div>
 
-                <button className="cta primary" onClick={() => setView("operatore")}>
+                <button className="cta primary" onClick={() => apriQrPdf(activeBusiness)}>
+                  <Printer size={16} /> Apri PDF da stampare
+                </button>
+                <button className="cta ghost" onClick={() => setView("operatore")}>
                   <ArrowRight size={16} /> Vai alla dashboard operatore
                 </button>
                 <button className="cta ghost" onClick={nuovaRegistrazione}>
