@@ -43,6 +43,26 @@ export async function nonPresente(businessId) {
   return data;
 }
 
+// --- Numerazione giornaliera: quanti numeri erano gia' stati emessi prima
+// di oggi (es. 1827), cosi' la UI puo' mostrare solo i numeri di oggi
+// (es. 37) sottraendo questa base da "current"/"last_issued"/il proprio
+// ticket, senza toccare la numerazione reale salvata nel database. ------
+export async function numeroBaseOggi(businessId) {
+  const oggiInizio = new Date();
+  oggiInizio.setHours(0, 0, 0, 0);
+
+  const { data, error } = await supabase
+    .from("tickets")
+    .select("number")
+    .eq("business_id", businessId)
+    .lt("created_at", oggiInizio.toISOString())
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (error) throw error;
+
+  return data && data.length > 0 ? data[0].number : 0;
+}
+
 // --- Statistiche: conteggi + attesa media per periodo (pagina Statistiche) --
 // offset conta i periodi indietro/avanti rispetto a quello corrente
 // (0 = oggi/questa settimana/questo mese/quest'anno, -1 = il precedente, ecc.)

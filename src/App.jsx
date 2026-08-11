@@ -18,6 +18,7 @@ import {
   unisciAttivita,
   eliminaAttivita,
   ascoltaAggiornamenti,
+  numeroBaseOggi,
 } from "./lib/queries";
 import { esportaCsv, esportaPdf } from "./lib/export";
 
@@ -235,6 +236,7 @@ const handleLogout = async () => {
   const [pulse, setPulse] = useState(false);
   const [servedToday, setServedToday] = useState(0);
   const [skippedToday, setSkippedToday] = useState(0);
+  const [baselineOggi, setBaselineOggi] = useState(0);
   const [statsPeriodPage, setStatsPeriodPage] = useState("giorno");
   const [statsOffset, setStatsOffset] = useState(0);
   const [statsData, setStatsData] = useState({ serviti: 0, nonPresentati: 0, attesaMedia: 0 });
@@ -280,6 +282,10 @@ const handleLogout = async () => {
   const isMyTurn = myTicket !== null && current === myTicket;
   const giaServito = myTicket !== null && current > myTicket;
   const isNext = myTicket !== null && position === 0 && !isMyTurn && !giaServito;
+  // Numeri mostrati all'utente: solo quelli di oggi (current/myTicket sono
+  // contatori cumulativi su tutta la storia dell'attivita').
+  const currentOggi = Math.max(current - baselineOggi, 0);
+  const myTicketOggi = myTicket !== null ? Math.max(myTicket - baselineOggi, 0) : null;
 
   useEffect(() => {
     if (isMyTurn) {
@@ -347,6 +353,7 @@ const handleLogout = async () => {
   const refreshStats = async (businessId) => {
     if (!businessId) return;
     const oggiDaMezzanotte = new Date(new Date().setHours(0, 0, 0, 0)).toISOString();
+    numeroBaseOggi(businessId).then(setBaselineOggi).catch(console.error);
     const serviti = await statisticheServiti(businessId, "giorno");
     setServedToday(serviti);
     const { count } = await supabase
@@ -971,14 +978,14 @@ owner_id: currentUser.id,
               <div className="eyebrow">{activeBusiness.name} — Cassa</div>
               <div style={{ marginTop: 14 }}>
                 <div className="status-label" style={{ marginBottom: 6 }}>Il tuo numero</div>
-                <FlapNumber value={myTicket} size="lg" />
+                <FlapNumber value={myTicketOggi} size="lg" />
               </div>
 
               <div className="perf" />
 
               <div className="status-line">
                 <span className="status-label">Ora in servizio</span>
-                <FlapNumber value={current} size="sm" />
+                <FlapNumber value={currentOggi} size="sm" />
               </div>
               <div className="status-line" style={{ marginTop: 12 }}>
                 <span className="status-label">Persone davanti a te</span>
@@ -1110,7 +1117,7 @@ owner_id: currentUser.id,
                 </div>
               </div>
               <div className="board-label">{activeBusiness.name} — Ora in servizio</div>
-              <FlapNumber value={current} size="lg" />
+              <FlapNumber value={currentOggi} size="lg" />
 
               <div className="op-actions">
                 <button className="cta primary" onClick={avanti} disabled={inCoda === 0}>
@@ -1146,7 +1153,7 @@ owner_id: currentUser.id,
               <div className="board-label" style={{ marginTop: 20 }}>In attesa</div>
               <div className="queue-strip">
                 {Array.from({ length: inCoda }).map((_, i) => (
-                  <span className="queue-chip" key={i}>#{current + i + 1}</span>
+                  <span className="queue-chip" key={i}>#{currentOggi + i + 1}</span>
                 ))}
                 {inCoda === 0 && <span style={{ fontSize: 13, color: "#9FB3AC" }}>Nessuno in coda al momento.</span>}
               </div>
