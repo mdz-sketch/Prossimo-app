@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, BarChart3, MapPin, Tag } from "lucide-react";
+import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, BarChart3, MapPin, Tag, ChevronLeft, ChevronRight } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "./lib/supabaseClient";
 import Login from "./components/Login";
@@ -12,6 +12,7 @@ import {
   statisticheServiti,
   statisticheComplete,
   andamentoPeriodo,
+  etichettaPeriodo,
   cercaAttivita,
   mieAttivita,
   unisciAttivita,
@@ -226,17 +227,23 @@ const handleLogout = async () => {
   const [servedToday, setServedToday] = useState(0);
   const [skippedToday, setSkippedToday] = useState(0);
   const [statsPeriodPage, setStatsPeriodPage] = useState("giorno");
+  const [statsOffset, setStatsOffset] = useState(0);
   const [statsData, setStatsData] = useState({ serviti: 0, nonPresentati: 0, attesaMedia: 0 });
   const [avgWaitToday, setAvgWaitToday] = useState(0);
   const andamentoVuoto = { labels: ORE_GIORNO, serviti: ORE_GIORNO.map(() => 0), nonPresentati: ORE_GIORNO.map(() => 0), attesaMedia: ORE_GIORNO.map(() => 0) };
   const [andamentoGiorno, setAndamentoGiorno] = useState(andamentoVuoto);
   const [andamentoStats, setAndamentoStats] = useState(andamentoVuoto);
 
+  const cambiaPeriodoStatistiche = (periodo) => {
+    setStatsPeriodPage(periodo);
+    setStatsOffset(0);
+  };
+
   useEffect(() => {
     if (view !== "statistiche" || !activeBusiness?.id) return;
-    statisticheComplete(activeBusiness.id, statsPeriodPage).then(setStatsData).catch(console.error);
-    andamentoPeriodo(activeBusiness.id, statsPeriodPage).then(setAndamentoStats).catch(console.error);
-  }, [view, activeBusiness?.id, statsPeriodPage]);
+    statisticheComplete(activeBusiness.id, statsPeriodPage, statsOffset).then(setStatsData).catch(console.error);
+    andamentoPeriodo(activeBusiness.id, statsPeriodPage, statsOffset).then(setAndamentoStats).catch(console.error);
+  }, [view, activeBusiness?.id, statsPeriodPage, statsOffset]);
 
   const [registered, setRegistered] = useState(false);
   const [businesses, setBusinesses] = useState([]);
@@ -345,6 +352,7 @@ const handleLogout = async () => {
     setActiveBusiness(b);
     localStorage.setItem("prossimo_active_business_id", b.id);
     setMyTicket(null);
+    setStatsOffset(0);
   };
 
   // --- Cliente --------------------------------------------------------
@@ -1206,11 +1214,35 @@ owner_id: currentUser.id,
             ) : (
               <>
                 <div className="tabs" style={{ marginTop: 12 }}>
-                  <button className={"tab-btn" + (statsPeriodPage === "giorno" ? " active" : "")} onClick={() => setStatsPeriodPage("giorno")}>Giorno</button>
-                  <button className={"tab-btn" + (statsPeriodPage === "settimana" ? " active" : "")} onClick={() => setStatsPeriodPage("settimana")}>Settimana</button>
-                  <button className={"tab-btn" + (statsPeriodPage === "mese" ? " active" : "")} onClick={() => setStatsPeriodPage("mese")}>Mese</button>
-                  <button className={"tab-btn" + (statsPeriodPage === "anno" ? " active" : "")} onClick={() => setStatsPeriodPage("anno")}>Anno</button>
+                  <button className={"tab-btn" + (statsPeriodPage === "giorno" ? " active" : "")} onClick={() => cambiaPeriodoStatistiche("giorno")}>Giorno</button>
+                  <button className={"tab-btn" + (statsPeriodPage === "settimana" ? " active" : "")} onClick={() => cambiaPeriodoStatistiche("settimana")}>Settimana</button>
+                  <button className={"tab-btn" + (statsPeriodPage === "mese" ? " active" : "")} onClick={() => cambiaPeriodoStatistiche("mese")}>Mese</button>
+                  <button className={"tab-btn" + (statsPeriodPage === "anno" ? " active" : "")} onClick={() => cambiaPeriodoStatistiche("anno")}>Anno</button>
                 </div>
+
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 14 }}>
+                  <button
+                    className="cta dark"
+                    style={{ margin: 0, width: "auto", padding: "8px 10px" }}
+                    onClick={() => setStatsOffset((o) => o - 1)}
+                    aria-label="Periodo precedente"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <span style={{ fontSize: 12.5, color: "#9FB3AC", fontWeight: 600 }}>
+                    {etichettaPeriodo(statsPeriodPage, statsOffset)}
+                  </span>
+                  <button
+                    className="cta dark"
+                    style={{ margin: 0, width: "auto", padding: "8px 10px" }}
+                    onClick={() => setStatsOffset((o) => Math.min(o + 1, 0))}
+                    disabled={statsOffset === 0}
+                    aria-label="Periodo successivo"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+
                 <div className="stat-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)", marginTop: 14 }}>
                   <div className="stat-box">
                     <div className="stat-num">{statsData.serviti}</div>

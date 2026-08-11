@@ -44,36 +44,77 @@ export async function nonPresente(businessId) {
 }
 
 // --- Statistiche: conteggi + attesa media per periodo (pagina Statistiche) --
-function dataInizioPeriodo(periodo) {
+// offset conta i periodi indietro/avanti rispetto a quello corrente
+// (0 = oggi/questa settimana/questo mese/quest'anno, -1 = il precedente, ecc.)
+function dataInizioPeriodo(periodo, offset = 0) {
   const now = new Date();
-  if (periodo === "giorno") return new Date(now.setHours(0, 0, 0, 0));
+  if (periodo === "giorno") {
+    const d = new Date(now);
+    d.setDate(d.getDate() + offset);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
   if (periodo === "settimana") {
     const giorno = now.getDay() === 0 ? 7 : now.getDay();
     const lunedi = new Date(now);
-    lunedi.setDate(now.getDate() - giorno + 1);
+    lunedi.setDate(now.getDate() - giorno + 1 + offset * 7);
     lunedi.setHours(0, 0, 0, 0);
     return lunedi;
   }
-  if (periodo === "mese") return new Date(now.getFullYear(), now.getMonth(), 1);
-  return new Date(now.getFullYear(), 0, 1);
+  if (periodo === "mese") return new Date(now.getFullYear(), now.getMonth() + offset, 1);
+  return new Date(now.getFullYear() + offset, 0, 1);
 }
 
-export async function statisticheComplete(businessId, periodo) {
-  const from = dataInizioPeriodo(periodo).toISOString();
+// Confine superiore (esclusivo) dello stesso periodo: inizio del periodo successivo.
+function dataFinePeriodo(periodo, offset = 0) {
+  return dataInizioPeriodo(periodo, offset + 1);
+}
+
+// Etichetta leggibile del periodo mostrato, per le frecce di navigazione.
+export function etichettaPeriodo(periodo, offset = 0) {
+  const now = new Date();
+  if (periodo === "giorno") {
+    if (offset === 0) return "Oggi";
+    if (offset === -1) return "Ieri";
+    const d = new Date(now);
+    d.setDate(d.getDate() + offset);
+    return d.toLocaleDateString("it-IT", { day: "numeric", month: "short" });
+  }
+  if (periodo === "settimana") {
+    if (offset === 0) return "Questa settimana";
+    const inizio = dataInizioPeriodo("settimana", offset);
+    const fine = new Date(inizio);
+    fine.setDate(inizio.getDate() + 6);
+    return `${inizio.getDate()}–${fine.getDate()} ${fine.toLocaleDateString("it-IT", { month: "short" })}`;
+  }
+  if (periodo === "mese") {
+    if (offset === 0) return "Questo mese";
+    const d = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+    return d.toLocaleDateString("it-IT", { month: "long", year: "numeric" });
+  }
+  if (offset === 0) return "Quest'anno";
+  return String(now.getFullYear() + offset);
+}
+
+export async function statisticheComplete(businessId, periodo, offset = 0) {
+  const from = dataInizioPeriodo(periodo, offset).toISOString();
+  const to = dataFinePeriodo(periodo, offset).toISOString();
 
   const { count: serviti } = await supabase
     .from("tickets")
     .select("*", { count: "exact", head: true })
     .eq("business_id", businessId)
     .eq("status", "servito")
-    .gte("created_at", from);
+    .gte("created_at", from)
+    .lt("created_at", to);
 
   const { count: nonPresentati } = await supabase
     .from("tickets")
     .select("*", { count: "exact", head: true })
     .eq("business_id", businessId)
     .eq("status", "non_presentato")
-    .gte("created_at", from);
+    .gte("created_at", from)
+    .lt("created_at", to);
 
   const { data: ticketServiti } = await supabase
     .from("tickets")
@@ -81,7 +122,8 @@ export async function statisticheComplete(businessId, periodo) {
     .eq("business_id", businessId)
     .eq("status", "servito")
     .not("served_at", "is", null)
-    .gte("created_at", from);
+    .gte("created_at", from)
+    .lt("created_at", to);
 
   let attesaMedia = 0;
   if (ticketServiti && ticketServiti.length > 0) {
@@ -101,7 +143,7 @@ export async function statisticheComplete(businessId, periodo) {
 
 // --- Statistiche: andamento reale per il grafico (serviti / non presentati /
 // attesa media per fascia oraria, giorno della settimana, giorno del mese o mese) --
-function bucketPerPeriodo(periodo) {
+function bucketPerPeriodo(periodo, offset = 0) {
   if (periodo === "giorno") {
     const labels = ["9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20"];
     return { labels, indiceDi: (d) => labels.indexOf(String(d.getHours())) };
@@ -111,8 +153,8 @@ function bucketPerPeriodo(periodo) {
     return { labels, indiceDi: (d) => { const g = d.getDay(); return g === 0 ? 6 : g - 1; } };
   }
   if (periodo === "mese") {
-    const oggi = new Date();
-    const giorniInMese = new Date(oggi.getFullYear(), oggi.getMonth() + 1, 0).getDate();
+    const meseTarget = dataInizioPeriodo("mese", offset);
+    const giorniInMese = new Date(meseTarget.getFullYear(), meseTarget.getMonth() + 1, 0).getDate();
     const labels = Array.from({ length: giorniInMese }, (_, i) => String(i + 1));
     return { labels, indiceDi: (d) => { const g = d.getDate(); return g >= 1 && g <= giorniInMese ? g - 1 : -1; } };
   }
@@ -120,17 +162,19 @@ function bucketPerPeriodo(periodo) {
   return { labels, indiceDi: (d) => d.getMonth() };
 }
 
-export async function andamentoPeriodo(businessId, periodo) {
-  const from = dataInizioPeriodo(periodo).toISOString();
+export async function andamentoPeriodo(businessId, periodo, offset = 0) {
+  const from = dataInizioPeriodo(periodo, offset).toISOString();
+  const to = dataFinePeriodo(periodo, offset).toISOString();
 
   const { data, error } = await supabase
     .from("tickets")
     .select("status, created_at, served_at")
     .eq("business_id", businessId)
-    .gte("created_at", from);
+    .gte("created_at", from)
+    .lt("created_at", to);
   if (error) throw error;
 
-  const { labels, indiceDi } = bucketPerPeriodo(periodo);
+  const { labels, indiceDi } = bucketPerPeriodo(periodo, offset);
   const serviti = labels.map(() => 0);
   const nonPresentati = labels.map(() => 0);
   const sommaAttesaMin = labels.map(() => 0);
