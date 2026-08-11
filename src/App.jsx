@@ -186,6 +186,10 @@ const handleLogout = async () => {
   // Viene impostata registrando una nuova attivita' o scegliendo
   // "Gestisci" da un'attivita' esistente nel pannello Admin.
   const [activeBusiness, setActiveBusiness] = useState(null);
+  // true se si e' arrivati scansionando davvero il QR code (/coda/<slug>):
+  // un cliente cosi' non deve vedere il link "Accesso operatore / admin",
+  // pensato solo per chi apre l'app per gestire un'attivita'.
+  const [clienteDaScansione, setClienteDaScansione] = useState(false);
   const [mieAttivitaList, setMieAttivitaList] = useState([]);
   const [codiceInvito, setCodiceInvito] = useState("");
   const [erroreInvito, setErroreInvito] = useState("");
@@ -308,6 +312,7 @@ const handleLogout = async () => {
           setActiveBusiness(data);
           localStorage.setItem("prossimo_active_business_id", data.id);
           setView("cliente");
+          setClienteDaScansione(true);
 
           // Arrivare su questa pagina significa che il QR e' gia' stato
           // scansionato davvero: il numero si prende subito, senza un
@@ -918,7 +923,7 @@ owner_id: currentUser.id,
           )}
         </div>
 
-        {!isLoggedIn && (
+        {!isLoggedIn && !clienteDaScansione && (
           <div style={{ textAlign: "center" }}>
             <button
               onClick={() => setView("operatore")}
