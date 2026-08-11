@@ -649,7 +649,16 @@ owner_id: currentUser.id,
         }
 
         .op-actions { display: flex; gap: 8px; margin-top: 18px; }
-        .op-actions .cta { margin-top: 0; }
+        .op-actions .cta {
+          margin-top: 0;
+          flex: 1 1 0;
+          min-width: 0;
+          padding: 12px 8px;
+          font-size: 12.5px;
+          white-space: normal;
+          text-align: center;
+          line-height: 1.25;
+        }
 
         .queue-strip {
           margin-top: 16px;
