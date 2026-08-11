@@ -100,6 +100,14 @@ const ORE_GIORNO = ["9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "
 const slugify = (s) =>
   s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
+// Percentuale di non presentati sul totale di clienti gestiti (serviti +
+// non presentati) — chi e' ancora in coda non conta, non ha ancora avuto
+// la sua occasione di presentarsi o no.
+const percentualeNonPresenti = (serviti, nonPresentati) => {
+  const totale = serviti + nonPresentati;
+  return totale > 0 ? Math.round((nonPresentati / totale) * 100) : 0;
+};
+
 export default function App() {
   const [view, setView] = useState("cliente");
 const [currentUser, setCurrentUser] = useState(null);
@@ -1130,7 +1138,7 @@ owner_id: currentUser.id,
                 </div>
                 <div className="stat-box">
                   <div className="stat-num" style={{ color: "#B7472A" }}>{skippedToday}</div>
-                  <div className="stat-lbl">Non presenti</div>
+                  <div className="stat-lbl">Non presenti ({percentualeNonPresenti(servedToday, skippedToday)}%)</div>
                 </div>
               </div>
 
@@ -1276,7 +1284,7 @@ owner_id: currentUser.id,
                   </div>
                   <div className="stat-box">
                     <div className="stat-num" style={{ color: "#B7472A" }}>{statsData.nonPresentati}</div>
-                    <div className="stat-lbl">Non presentati</div>
+                    <div className="stat-lbl">Non presentati ({percentualeNonPresenti(statsData.serviti, statsData.nonPresentati)}%)</div>
                   </div>
                 </div>
 
