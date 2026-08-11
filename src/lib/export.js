@@ -83,10 +83,13 @@ export function esportaPdf(business, periodo, etichetta, statsData, andamentoSta
   doc.save(nomeFile(business, periodo, etichetta, "pdf"));
 }
 
-// --- QR code da stampare in cassa -----------------------------------------
-// Apre direttamente il PDF in una nuova scheda (invece di scaricarlo), cosi'
-// da poterlo stampare subito con Ctrl/Cmd+P dal visualizzatore del browser.
-export async function apriQrPdf(business) {
+// --- QR code da stampare/condividere ---------------------------------------
+function nomeFileQr(business) {
+  const parteNome = business.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+  return `qr-${parteNome}.pdf`;
+}
+
+async function costruisciQrPdf(business) {
   const url = `${window.location.origin}/coda/${business.slug}`;
   const qrDataUrl = await QRCode.toDataURL(url, { margin: 1, width: 600 });
 
@@ -111,5 +114,37 @@ export async function apriQrPdf(business) {
   doc.setTextColor(120);
   doc.text(url, pageWidth / 2, 70 + qrSize + 14, { align: "center" });
 
+  return doc;
+}
+
+// Apre direttamente il PDF in una nuova scheda (invece di scaricarlo), cosi'
+// da poterlo stampare subito con Ctrl/Cmd+P dal visualizzatore del browser.
+export async function apriQrPdf(business) {
+  const doc = await costruisciQrPdf(business);
   window.open(doc.output("bloburl"), "_blank");
+}
+
+// Condivide il PDF come file vero e proprio (es. via WhatsApp arriva un PDF
+// allegato, non solo un link). Sui browser/dispositivi che non supportano
+// la condivisione di file (tipicamente desktop), apre il PDF in una nuova
+// scheda cosi' l'utente puo' comunque scaricarlo o stamparlo.
+export async function condividiQrPdf(business) {
+  const doc = await costruisciQrPdf(business);
+  const blob = doc.output("blob");
+  const file = new File([blob], nomeFileQr(business), { type: "application/pdf" });
+
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({
+        title: business.name,
+        text: `Prendi il tuo numero per ${business.name}`,
+        files: [file],
+      });
+    } catch {
+      // utente ha annullato la condivisione, nessun errore da mostrare
+    }
+    return;
+  }
+
+  window.open(URL.createObjectURL(blob), "_blank");
 }
