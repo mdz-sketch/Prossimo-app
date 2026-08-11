@@ -222,7 +222,7 @@ const handleLogout = async () => {
     setErroreInvito("");
     setInvitoInCorso(true);
     try {
-      await unisciAttivita(codiceInvito, currentUser.id);
+      await unisciAttivita(codiceInvito);
       setCodiceInvito("");
       ricaricaMieAttivita();
     } catch (e2) {
@@ -339,17 +339,6 @@ const handleLogout = async () => {
     }
   }, []);
 
-  // Sottoscrizione realtime: quando "current"/"last_issued" cambiano su
-  // Supabase (perche' un operatore ha premuto Avanti da un altro dispositivo),
-  // la UI si aggiorna da sola.
-  useEffect(() => {
-    if (!activeBusiness?.id) return;
-    const cleanup = ascoltaAggiornamenti(activeBusiness.id, (nuovo) => {
-      setActiveBusiness((b) => (b ? { ...b, ...nuovo } : b));
-    });
-    return cleanup;
-  }, [activeBusiness?.id]);
-
   const refreshStats = async (businessId) => {
     if (!businessId) return;
     const oggiDaMezzanotte = new Date(new Date().setHours(0, 0, 0, 0)).toISOString();
@@ -376,6 +365,21 @@ const handleLogout = async () => {
 
   useEffect(() => {
     refreshStats(activeBusiness?.id);
+  }, [activeBusiness?.id]);
+
+  // Sottoscrizione realtime: quando "current"/"last_issued" cambiano su
+  // Supabase (perche' un operatore ha premuto Avanti da un altro dispositivo),
+  // la UI si aggiorna da sola. Ricarica anche le statistiche (serviti/non
+  // presenti/grafico di oggi), altrimenti restavano ferme finche' non si
+  // premeva un pulsante da questo stesso dispositivo.
+  useEffect(() => {
+    if (!activeBusiness?.id) return;
+    const cleanup = ascoltaAggiornamenti(activeBusiness.id, (nuovo) => {
+      setActiveBusiness((b) => (b ? { ...b, ...nuovo } : b));
+      refreshStats(activeBusiness.id);
+    });
+    return cleanup;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeBusiness?.id]);
 
   const selezionaAttivita = (b) => {
