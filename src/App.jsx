@@ -20,7 +20,7 @@ import {
   ascoltaAggiornamenti,
   numeroBaseOggi,
 } from "./lib/queries";
-import { esportaCsv, esportaPdf, apriQrPdf } from "./lib/export";
+import { esportaCsv, esportaPdf, apriQrPdf, condividiQrPdf } from "./lib/export";
 
 function Flap({ char }) {
   const [display, setDisplay] = useState(char);
@@ -138,19 +138,6 @@ const [currentUser, setCurrentUser] = useState(null);
     });
     return () => listener.subscription.unsubscribe();
   }, []);
-const handleCondividi = async (business) => {
-    const url = `${window.location.origin}/coda/${business.slug}`;
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: business.name, text: `Prendi il tuo numero per ${business.name}`, url });
-      } catch {
-        // utente ha annullato la condivisione, nessun errore da mostrare
-      }
-    } else {
-      navigator.clipboard.writeText(url);
-      alert("Link copiato negli appunti!");
-    }
-  };
 const handleCondividiInvito = async (business) => {
     const url = `${window.location.origin}/unisciti/${business.invite_code}`;
     if (navigator.share) {
@@ -1116,7 +1103,7 @@ owner_id: currentUser.id,
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 11.5, color: "#9FB3AC", marginBottom: 6 }}>QR della tua coda</div>
                   <div style={{ display: "flex", gap: 8 }}>
-                    <button className="cta ghost" style={{ fontSize: 12.5, padding: "6px 10px" }} onClick={() => handleCondividi(activeBusiness)}>
+                    <button className="cta ghost" style={{ fontSize: 12.5, padding: "6px 10px" }} onClick={() => condividiQrPdf(activeBusiness)}>
                       Condividi link
                     </button>
                     <button className="cta ghost" style={{ fontSize: 12.5, padding: "6px 10px" }} onClick={() => apriQrPdf(activeBusiness)}>
