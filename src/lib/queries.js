@@ -275,23 +275,16 @@ export async function mieAttivita(userId) {
 }
 
 // --- Operatore: entra in un'attivita' tramite codice invito ---------------
-export async function unisciAttivita(inviteCode, userId) {
-  const { data: business, error: errFind } = await supabase
-    .from("businesses")
-    .select("id, name")
-    .eq("invite_code", inviteCode.trim())
-    .single();
-  if (errFind || !business) throw new Error("Codice invito non valido");
-
-  const { error: errInsert } = await supabase
-    .from("business_staff")
-    .insert({ business_id: business.id, user_id: userId });
-  if (errInsert) {
-    if (errInsert.code === "23505") throw new Error("Sei gia' staff di questa attivita'");
-    throw errInsert;
-  }
-
-  return business;
+// La validazione del codice e l'insert su business_staff avvengono insieme,
+// dentro la funzione RPC (SECURITY DEFINER): l'insert diretto dal client su
+// business_staff e' bloccato dalla RLS, quindi questo e' l'unico modo di
+// entrare a far parte dello staff di un'attivita'.
+export async function unisciAttivita(inviteCode) {
+  const { data, error } = await supabase.rpc("unisciti_con_invito", {
+    codice_input: inviteCode.trim(),
+  });
+  if (error) throw new Error(error.message);
+  return data;
 }
 
 export async function eliminaAttivita(businessId) {
