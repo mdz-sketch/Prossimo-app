@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, BarChart3, MapPin, Tag, ChevronLeft, ChevronRight } from "lucide-react";
+import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, BarChart3, MapPin, Tag, ChevronLeft, ChevronRight, FileSpreadsheet, FileText } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "./lib/supabaseClient";
 import Login from "./components/Login";
@@ -19,6 +19,7 @@ import {
   eliminaAttivita,
   ascoltaAggiornamenti,
 } from "./lib/queries";
+import { esportaCsv, esportaPdf } from "./lib/export";
 
 function Flap({ char }) {
   const [display, setDisplay] = useState(char);
@@ -1270,6 +1271,23 @@ owner_id: currentUser.id,
                     aria-label="Periodo successivo"
                   >
                     <ChevronRight size={16} />
+                  </button>
+                </div>
+
+                <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                  <button
+                    className="cta dark"
+                    style={{ margin: 0, flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 12.5 }}
+                    onClick={() => esportaCsv(activeBusiness, statsPeriodPage, etichettaPeriodo(statsPeriodPage, statsOffset), statsData, andamentoStats)}
+                  >
+                    <FileSpreadsheet size={14} /> Esporta Excel
+                  </button>
+                  <button
+                    className="cta dark"
+                    style={{ margin: 0, flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 12.5 }}
+                    onClick={() => esportaPdf(activeBusiness, statsPeriodPage, etichettaPeriodo(statsPeriodPage, statsOffset), statsData, andamentoStats)}
+                  >
+                    <FileText size={14} /> Esporta PDF
                   </button>
                 </div>
 
