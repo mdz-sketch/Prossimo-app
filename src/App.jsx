@@ -737,6 +737,7 @@ owner_id: currentUser.id,
         }
         .bar-col {
           flex: 1;
+          min-width: 0;
           height: 100%;
           display: flex;
           flex-direction: column;
@@ -761,7 +762,7 @@ owner_id: currentUser.id,
         }
         .bar-lbl {
           font-family: 'IBM Plex Mono', monospace;
-          font-size: 8.5px;
+          font-size: 7px;
           color: #9FB3AC;
           margin-top: 5px;
         }
