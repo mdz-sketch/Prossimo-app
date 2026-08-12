@@ -110,6 +110,22 @@ const percentualeNonPresenti = (serviti, nonPresentati) => {
   return totale > 0 ? Math.round((nonPresentati / totale) * 100) : 0;
 };
 
+const formatOra = (h) => `${String(h).padStart(2, "0")}:00`;
+
+// Se l'attivita' e' aperta ora (in base a ora_apertura/ora_chiusura) e,
+// se e' chiusa, quando riapre. Confronto solo sull'ora (nessun supporto per
+// orari che attraversano la mezzanotte, coerente con il resto dell'app).
+const statoApertura = (business, adesso) => {
+  const apertura = business?.ora_apertura ?? 9;
+  const chiusura = business?.ora_chiusura ?? 20;
+  const ora = adesso.getHours();
+  const aperta = ora >= apertura && ora < chiusura;
+  const prossimaAperturaLabel = ora < apertura
+    ? `Riapriamo oggi alle ${formatOra(apertura)}`
+    : `Riapriamo domani alle ${formatOra(apertura)}`;
+  return { aperta, apertura, chiusura, prossimaAperturaLabel };
+};
+
 export default function App() {
   const [view, setView] = useState("cliente");
 const [currentUser, setCurrentUser] = useState(null);
@@ -190,6 +206,14 @@ const handleLogout = async () => {
   // un cliente cosi' non deve vedere il link "Accesso operatore / admin",
   // pensato solo per chi apre l'app per gestire un'attivita'.
   const [clienteDaScansione, setClienteDaScansione] = useState(false);
+  // Aggiornato ogni minuto: fa ricalcolare se l'attivita' e' aperta o
+  // chiusa anche se il cliente resta con la pagina ferma sullo schermo.
+  const [oraCorrente, setOraCorrente] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setOraCorrente(new Date()), 60000);
+    return () => clearInterval(t);
+  }, []);
+  const statoOrari = activeBusiness ? statoApertura(activeBusiness, oraCorrente) : null;
   const [mieAttivitaList, setMieAttivitaList] = useState([]);
   const [codiceInvito, setCodiceInvito] = useState("");
   const [erroreInvito, setErroreInvito] = useState("");
@@ -313,6 +337,10 @@ const handleLogout = async () => {
           localStorage.setItem("prossimo_active_business_id", data.id);
           setView("cliente");
           setClienteDaScansione(true);
+
+          // Attivita' chiusa in questo momento: non ha senso far prendere
+          // un numero, si mostra invece il messaggio con l'orario di riapertura.
+          if (!statoApertura(data, new Date()).aperta) return;
 
           // Arrivare su questa pagina significa che il QR e' gia' stato
           // scansionato davvero: il numero si prende subito, senza un
@@ -964,6 +992,22 @@ owner_id: currentUser.id,
               <div className="board-label">Nessuna attivita' selezionata</div>
               <p style={{ fontSize: 13, color: "#9FB3AC" }}>
                 Scansiona il QR code esposto nel locale per prendere il tuo numero. Sei il gestore di un'attivita'? Usa "Accesso operatore / admin" qui sopra.
+              </p>
+            </div>
+          ) : myTicket === null && statoOrari && !statoOrari.aperta ? (
+            <div className="ticket" style={{ textAlign: "center" }}>
+              <div className="eyebrow">{activeBusiness.name} — Cassa</div>
+              <div style={{ margin: "18px 0 6px" }}>
+                <Clock size={48} color="#16302B" style={{ margin: "0 auto" }} />
+              </div>
+              <div style={{ fontFamily: "'Archivo', sans-serif", fontWeight: 800, fontSize: 18, marginTop: 8 }}>
+                Grazie per essere passato/a!
+              </div>
+              <p style={{ fontSize: 13, color: "rgba(22,48,43,0.65)", marginTop: 8 }}>
+                Al momento siamo chiusi. {statoOrari.prossimaAperturaLabel}.
+              </p>
+              <p style={{ fontSize: 11.5, color: "rgba(22,48,43,0.5)", marginTop: 6 }}>
+                Orario: {formatOra(statoOrari.apertura)}–{formatOra(statoOrari.chiusura)}
               </p>
             </div>
           ) : myTicket === null ? (
