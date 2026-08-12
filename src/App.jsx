@@ -59,7 +59,7 @@ function FlapNumber({ value, size = "lg" }) {
   );
 }
 
-function MiniBarChart({ labels, series }) {
+function MiniBarChart({ labels, series, chiusi }) {
   // Limite condiviso da tutte le serie del grafico (stessa unita' di misura),
   // cosi' le altezze delle barre restano davvero confrontabili tra loro.
   const limite = Math.max(...series.flatMap((s) => s.data), 0) + 5;
@@ -67,7 +67,7 @@ function MiniBarChart({ labels, series }) {
     <div>
       <div className="bar-chart">
         {labels.map((label, i) => (
-          <div className="bar-col" key={i}>
+          <div className="bar-col" key={i} style={chiusi?.[i] ? { opacity: 0.35 } : undefined}>
             <div className="bar-group">
               {series.map((s) => (
                 <div
@@ -77,11 +77,11 @@ function MiniBarChart({ labels, series }) {
                     height: s.data[i] > 0 ? `${Math.max((s.data[i] / limite) * 100, 4)}%` : "0%",
                     background: s.color,
                   }}
-                  title={`${s.name}: ${s.data[i]}`}
+                  title={chiusi?.[i] ? `${label}: chiuso` : `${s.name}: ${s.data[i]}`}
                 />
               ))}
             </div>
-            <span className="bar-lbl">{label}</span>
+            <span className="bar-lbl">{label}{chiusi?.[i] ? " ✕" : ""}</span>
           </div>
         ))}
       </div>
@@ -112,18 +112,50 @@ const percentualeNonPresenti = (serviti, nonPresentati) => {
 
 const formatOra = (h) => `${String(h).padStart(2, "0")}:00`;
 
-// Se l'attivita' e' aperta ora (in base a ora_apertura/ora_chiusura) e,
-// se e' chiusa, quando riapre. Confronto solo sull'ora (nessun supporto per
-// orari che attraversano la mezzanotte, coerente con il resto dell'app).
+// Giorni della settimana in ordine "italiano" (lunedi' prima), ciascuno
+// abbinato al numero restituito da Date.getDay() (0 = domenica).
+const GIORNI_SETTIMANA = [
+  { label: "Lun", labelEsteso: "lunedi'", jsDay: 1 },
+  { label: "Mar", labelEsteso: "martedi'", jsDay: 2 },
+  { label: "Mer", labelEsteso: "mercoledi'", jsDay: 3 },
+  { label: "Gio", labelEsteso: "giovedi'", jsDay: 4 },
+  { label: "Ven", labelEsteso: "venerdi'", jsDay: 5 },
+  { label: "Sab", labelEsteso: "sabato", jsDay: 6 },
+  { label: "Dom", labelEsteso: "domenica", jsDay: 0 },
+];
+const TUTTI_I_GIORNI = GIORNI_SETTIMANA.map((g) => g.jsDay);
+
+// Se l'attivita' e' aperta ora (in base a ora_apertura/ora_chiusura e ai
+// giorni configurati) e, se e' chiusa, quando riapre: puo' essere piu'
+// tardi oggi stesso, domani, o un giorno successivo se l'attivita' resta
+// chiusa per piu' di un giorno di fila (es. weekend). Confronto solo
+// sull'ora (nessun supporto per orari che attraversano la mezzanotte).
 const statoApertura = (business, adesso) => {
   const apertura = business?.ora_apertura ?? 9;
   const chiusura = business?.ora_chiusura ?? 20;
-  const ora = adesso.getHours();
-  const aperta = ora >= apertura && ora < chiusura;
-  const prossimaAperturaLabel = ora < apertura
-    ? `Riapriamo oggi alle ${formatOra(apertura)}`
-    : `Riapriamo domani alle ${formatOra(apertura)}`;
-  return { aperta, apertura, chiusura, prossimaAperturaLabel };
+  const giorniApertura = business?.giorni_apertura ?? TUTTI_I_GIORNI;
+  const oggiGiorno = adesso.getDay();
+  const oraAttuale = adesso.getHours();
+  const apertaOggi = giorniApertura.includes(oggiGiorno);
+
+  if (apertaOggi && oraAttuale >= apertura && oraAttuale < chiusura) {
+    return { aperta: true, apertura, chiusura, prossimaAperturaLabel: "" };
+  }
+
+  if (apertaOggi && oraAttuale < apertura) {
+    return { aperta: false, apertura, chiusura, prossimaAperturaLabel: `Riapriamo oggi alle ${formatOra(apertura)}` };
+  }
+
+  for (let i = 1; i <= 7; i++) {
+    const giornoProva = (oggiGiorno + i) % 7;
+    if (giorniApertura.includes(giornoProva)) {
+      const giorno = GIORNI_SETTIMANA.find((g) => g.jsDay === giornoProva);
+      const quando = i === 1 ? "domani" : giorno.labelEsteso;
+      return { aperta: false, apertura, chiusura, prossimaAperturaLabel: `Riapriamo ${quando} alle ${formatOra(apertura)}` };
+    }
+  }
+
+  return { aperta: false, apertura, chiusura, prossimaAperturaLabel: "Nessun giorno di apertura impostato" };
 };
 
 export default function App() {
@@ -260,6 +292,13 @@ const handleLogout = async () => {
   const [andamentoGiorno, setAndamentoGiorno] = useState(andamentoVuoto);
   const [andamentoStats, setAndamentoStats] = useState(andamentoVuoto);
 
+  // Nella vista Settimana, marca nel grafico i giorni in cui l'attivita'
+  // e' chiusa (bucketPerPeriodo ordina le colonne Lun..Dom).
+  const JS_WEEKDAY_PER_INDICE_SETTIMANA = [1, 2, 3, 4, 5, 6, 0];
+  const giorniChiusiSettimana = statsPeriodPage === "settimana" && activeBusiness
+    ? JS_WEEKDAY_PER_INDICE_SETTIMANA.map((jsDay) => !(activeBusiness.giorni_apertura ?? TUTTI_I_GIORNI).includes(jsDay))
+    : undefined;
+
   const cambiaPeriodoStatistiche = (periodo) => {
     setStatsPeriodPage(periodo);
     setStatsOffset(0);
@@ -285,7 +324,14 @@ const handleLogout = async () => {
   const [formType, setFormType] = useState("Pizzeria");
   const [formOraApertura, setFormOraApertura] = useState(9);
   const [formOraChiusura, setFormOraChiusura] = useState(20);
+  const [formGiorniApertura, setFormGiorniApertura] = useState(TUTTI_I_GIORNI);
   const [errore, setErrore] = useState("");
+
+  const toggleGiornoApertura = (jsDay) => {
+    setFormGiorniApertura((giorni) =>
+      giorni.includes(jsDay) ? giorni.filter((g) => g !== jsDay) : [...giorni, jsDay]
+    );
+  };
 
   // Finche' non ci sono ancora dati storici sufficienti (attivita' nuova,
   // nessuno ancora servito oggi), usa una stima prudente invece di "0 min".
@@ -471,6 +517,10 @@ const handleLogout = async () => {
       setErrore("L'orario di chiusura deve essere dopo quello di apertura");
       return;
     }
+    if (formGiorniApertura.length === 0) {
+      setErrore("Seleziona almeno un giorno di apertura");
+      return;
+    }
     setErrore("");
     const rand = Math.random().toString(16).slice(2, 6);
     const slug = `${slugify(formName) || "attivita"}-${rand}`;
@@ -485,6 +535,7 @@ const handleLogout = async () => {
         last_issued: 0,
         ora_apertura: formOraApertura,
         ora_chiusura: formOraChiusura,
+        giorni_apertura: formGiorniApertura,
 owner_id: currentUser.id,
       })
       .select()
@@ -506,6 +557,7 @@ owner_id: currentUser.id,
     setFormType("Pizzeria");
     setFormOraApertura(9);
     setFormOraChiusura(20);
+    setFormGiorniApertura(TUTTI_I_GIORNI);
   };
 
   // --- Admin --------------------------------------------------------------
@@ -1371,6 +1423,7 @@ owner_id: currentUser.id,
                 <div className="board-label" style={{ marginTop: 4 }}>Persone</div>
                 <MiniBarChart
                   labels={andamentoStats.labels}
+                  chiusi={giorniChiusiSettimana}
                   series={[
                     { name: "Serviti", data: andamentoStats.serviti, color: "#C99A3E" },
                     { name: "Non presentati", data: andamentoStats.nonPresentati, color: "#B7472A" },
@@ -1383,6 +1436,7 @@ owner_id: currentUser.id,
                 <div className="board-label" style={{ marginTop: 18 }}>Attesa media (min)</div>
                 <MiniBarChart
                   labels={andamentoStats.labels}
+                  chiusi={giorniChiusiSettimana}
                   series={[
                     { name: "Attesa media (min)", data: andamentoStats.attesaMedia, color: "#5C87A6" },
                   ]}
@@ -1449,6 +1503,19 @@ owner_id: currentUser.id,
                       <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>
                     ))}
                   </select>
+                </div>
+
+                <label className="field-label">Giorni di apertura</label>
+                <div className="chip-row">
+                  {GIORNI_SETTIMANA.map((g) => (
+                    <button
+                      key={g.jsDay}
+                      className={"chip" + (formGiorniApertura.includes(g.jsDay) ? " active" : "")}
+                      onClick={() => toggleGiornoApertura(g.jsDay)}
+                    >
+                      {g.label}
+                    </button>
+                  ))}
                 </div>
 
                 <button className="cta primary" onClick={generaAttivita} disabled={!formName.trim()}>
