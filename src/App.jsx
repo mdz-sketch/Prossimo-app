@@ -1105,25 +1105,25 @@ owner_id: currentUser.id,
                         </div>
                       )}
 
-                     <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                    <button className="cta dark" style={{ flex: 1 }} onClick={() => { selezionaAttivita(b); setView("operatore"); }}>
-                      Gestisci
-                    </button>
-                    {b.ruolo === "proprietario" && (
-                      <button
-                        className="cta dark"
-                        style={{ flex: 1 }}
-                        onClick={() => setAttivitaDaInvitare(attivitaDaInvitare === b.id ? null : b.id)}
-                      >
-                        Invita
-                      </button>
-                    )}
-                    {b.ruolo === "proprietario" && (
-                      <button className="cta" style={{ flex: 1, background: "#C0392B", color: "#F1ECDA", border: "none" }} onClick={() => handleElimina(b)}>
-                        Elimina
-                      </button>
-                    )}
-                  </div>
+                      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                        <button className="cta dark" style={{ flex: 1, minWidth: 0 }} onClick={() => { selezionaAttivita(b); setView("operatore"); }}>
+                          Gestisci
+                        </button>
+                        {b.ruolo === "proprietario" && (
+                          <button
+                            className="cta dark"
+                            style={{ flex: 1, minWidth: 0 }}
+                            onClick={() => setAttivitaDaInvitare(attivitaDaInvitare === b.id ? null : b.id)}
+                          >
+                            Invita
+                          </button>
+                        )}
+                        {b.ruolo === "proprietario" && (
+                          <button className="cta" style={{ flex: 1, minWidth: 0, background: "#C0392B", color: "#F1ECDA", border: "none" }} onClick={() => handleElimina(b)}>
+                            Elimina
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1182,7 +1182,7 @@ owner_id: currentUser.id,
                   <RotateCcw size={16} /> Richiama
                 </button>
                 <button className="cta dark" onClick={nonPresente} disabled={inCoda === 0} title="Il cliente non si e' presentato">
-                  <SkipForward size={16} /> Non presente
+                  <SkipForward size={16} /> Assente
                 </button>
               </div>
 
@@ -1273,13 +1273,13 @@ owner_id: currentUser.id,
                   <div className="admin-card-row"><MapPin size={12} /> {b.address || "—"}</div>
                   <div className="admin-card-row"><Link2 size={12} /> tuapp.it/coda/{b.slug}</div>
                   <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                    <button className="cta dark" style={{ flex: 1 }} onClick={() => { selezionaAttivita(b); setView("operatore"); }}>
+                    <button className="cta dark" style={{ flex: 1, minWidth: 0 }} onClick={() => { selezionaAttivita(b); setView("operatore"); }}>
                       Gestisci
                     </button>
-                    <button className="cta dark" style={{ flex: 1, opacity: 0.75 }} onClick={() => { selezionaAttivita(b); setView("statistiche"); }}>
+                    <button className="cta dark" style={{ flex: 1, minWidth: 0, opacity: 0.75 }} onClick={() => { selezionaAttivita(b); setView("statistiche"); }}>
                       Statistiche
                     </button>
-                    <button className="cta" style={{ flex: 1, background: "#C0392B", color: "#F1ECDA", border: "none" }} onClick={() => handleElimina(b)}>
+                    <button className="cta" style={{ flex: 1, minWidth: 0, background: "#C0392B", color: "#F1ECDA", border: "none" }} onClick={() => handleElimina(b)}>
                       Elimina
                     </button>
                   </div>
@@ -1339,14 +1339,14 @@ owner_id: currentUser.id,
                 <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
                   <button
                     className="cta dark"
-                    style={{ margin: 0, flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 12.5 }}
+                    style={{ margin: 0, flex: 1, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 12.5 }}
                     onClick={() => esportaCsv(activeBusiness, statsPeriodPage, etichettaPeriodo(statsPeriodPage, statsOffset), statsData, andamentoStats)}
                   >
                     <FileSpreadsheet size={14} /> Esporta Excel
                   </button>
                   <button
                     className="cta dark"
-                    style={{ margin: 0, flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 12.5 }}
+                    style={{ margin: 0, flex: 1, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 12.5 }}
                     onClick={() => esportaPdf(activeBusiness, statsPeriodPage, etichettaPeriodo(statsPeriodPage, statsOffset), statsData, andamentoStats)}
                   >
                     <FileText size={14} /> Esporta PDF
