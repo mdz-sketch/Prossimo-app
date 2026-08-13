@@ -439,6 +439,46 @@ const handleLogout = async () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allertaCodaLunga, notificheAttive]);
 
+  // Notifica al cliente quando mancano pochi numeri al suo turno (stesso
+  // meccanismo "leggero" di sopra: notifica del browser, non un push vero,
+  // funziona solo finche' tiene la scheda dell'app aperta).
+  const SOGLIA_AVVISO_CLIENTE = 3;
+  const clienteInAvviso = myTicket !== null && position !== null && position <= SOGLIA_AVVISO_CLIENTE && !isMyTurn && !giaServito;
+  const [notificheClienteAttive, setNotificheClienteAttive] = useState(
+    () => typeof Notification !== "undefined" && Notification.permission === "granted"
+  );
+  const posizioneGiaNotificata = useRef(false);
+
+  const attivaNotificheCliente = async () => {
+    if (typeof Notification === "undefined") {
+      alert("Il tuo browser non supporta le notifiche.");
+      return;
+    }
+    const permesso = await Notification.requestPermission();
+    setNotificheClienteAttive(permesso === "granted");
+  };
+
+  useEffect(() => {
+    posizioneGiaNotificata.current = false;
+  }, [myTicket]);
+
+  useEffect(() => {
+    if (!clienteInAvviso) {
+      if (position !== null && position > SOGLIA_AVVISO_CLIENTE) posizioneGiaNotificata.current = false;
+      return;
+    }
+    if (posizioneGiaNotificata.current || !notificheClienteAttive) return;
+    posizioneGiaNotificata.current = true;
+    if (typeof Notification !== "undefined" && Notification.permission === "granted" && activeBusiness) {
+      new Notification(`${activeBusiness.name}: manca poco!`, {
+        body: position === 0
+          ? "Tocca a te tra pochissimo, preparati."
+          : `Mancano solo ${position} numeri prima del tuo turno.`,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clienteInAvviso, notificheClienteAttive, position]);
+
   useEffect(() => {
     if (isMyTurn) {
       setPulse(true);
@@ -1259,6 +1299,11 @@ const handleLogout = async () => {
                   <CheckCircle2 size={20} />
                   Grazie per essere stato da noi
                 </div>
+              )}
+              {!giaServito && !notificheClienteAttive && (
+                <button className="cta ghost" onClick={attivaNotificheCliente}>
+                  <Bell size={15} /> Avvisami quando manca poco
+                </button>
               )}
               <button className="cta ghost" onClick={annulla}>
                 <X size={15} /> Annulla prenotazione
