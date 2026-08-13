@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, BarChart3, MapPin, Tag, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Printer } from "lucide-react";
+import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, BarChart3, MapPin, Tag, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Printer, AlertTriangle } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "./lib/supabaseClient";
 import Login from "./components/Login";
@@ -373,6 +373,9 @@ const handleLogout = async () => {
   const [formOraApertura, setFormOraApertura] = useState(9);
   const [formOraChiusura, setFormOraChiusura] = useState(20);
   const [formGiorniApertura, setFormGiorniApertura] = useState(TUTTI_I_GIORNI);
+  // Soglie opzionali per l'avviso di coda lunga: stringa vuota = disattivata.
+  const [formSogliaCoda, setFormSogliaCoda] = useState("");
+  const [formSogliaAttesa, setFormSogliaAttesa] = useState("");
   const [errore, setErrore] = useState("");
 
   const toggleGiornoApertura = (jsDay) => {
@@ -395,6 +398,46 @@ const handleLogout = async () => {
   // contatori cumulativi su tutta la storia dell'attivita').
   const currentOggi = Math.max(current - baselineOggi, 0);
   const myTicketOggi = myTicket !== null ? Math.max(myTicket - baselineOggi, 0) : null;
+
+  // Avviso coda lunga: attivo se la coda o l'attesa stimata per l'ultimo
+  // arrivato superano le soglie impostate dal titolare (opzionali).
+  const attesaStimataCoda = inCoda * avgWaitStimata;
+  const sogliaCodaSuperata = activeBusiness?.soglia_coda != null && inCoda > activeBusiness.soglia_coda;
+  const sogliaAttesaSuperata = activeBusiness?.soglia_attesa != null && attesaStimataCoda > activeBusiness.soglia_attesa;
+  const allertaCodaLunga = sogliaCodaSuperata || sogliaAttesaSuperata;
+
+  const [notificheAttive, setNotificheAttive] = useState(
+    () => typeof Notification !== "undefined" && Notification.permission === "granted"
+  );
+  const allertaGiaNotificata = useRef(false);
+
+  const attivaNotificheBrowser = async () => {
+    if (typeof Notification === "undefined") {
+      alert("Il tuo browser non supporta le notifiche.");
+      return;
+    }
+    const permesso = await Notification.requestPermission();
+    setNotificheAttive(permesso === "granted");
+  };
+
+  // Notifica browser (solo se la scheda e' aperta, anche in background):
+  // una sola volta per ogni volta che si supera la soglia, non ad ogni update.
+  useEffect(() => {
+    if (!allertaCodaLunga) {
+      allertaGiaNotificata.current = false;
+      return;
+    }
+    if (allertaGiaNotificata.current || !notificheAttive) return;
+    allertaGiaNotificata.current = true;
+    if (typeof Notification !== "undefined" && Notification.permission === "granted" && activeBusiness) {
+      new Notification(`${activeBusiness.name}: coda lunga`, {
+        body: sogliaCodaSuperata
+          ? `${inCoda} persone in coda (soglia: ${activeBusiness.soglia_coda})`
+          : `Attesa stimata ~${attesaStimataCoda} min (soglia: ${activeBusiness.soglia_attesa} min)`,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allertaCodaLunga, notificheAttive]);
 
   useEffect(() => {
     if (isMyTurn) {
@@ -569,6 +612,8 @@ const handleLogout = async () => {
     setFormOraApertura(b.ora_apertura ?? 9);
     setFormOraChiusura(b.ora_chiusura ?? 20);
     setFormGiorniApertura(b.giorni_apertura ?? TUTTI_I_GIORNI);
+    setFormSogliaCoda(b.soglia_coda != null ? String(b.soglia_coda) : "");
+    setFormSogliaAttesa(b.soglia_attesa != null ? String(b.soglia_attesa) : "");
     setAttivitaInModifica(b);
     setRegistered(false);
     setErrore("");
@@ -600,6 +645,8 @@ const handleLogout = async () => {
       ora_apertura: formOraApertura,
       ora_chiusura: formOraChiusura,
       giorni_apertura: formGiorniApertura,
+      soglia_coda: formSogliaCoda === "" ? null : Number(formSogliaCoda),
+      soglia_attesa: formSogliaAttesa === "" ? null : Number(formSogliaAttesa),
     };
 
     if (attivitaInModifica) {
@@ -653,6 +700,8 @@ const handleLogout = async () => {
     setFormOraApertura(9);
     setFormOraChiusura(20);
     setFormGiorniApertura(TUTTI_I_GIORNI);
+    setFormSogliaCoda("");
+    setFormSogliaAttesa("");
   };
 
   // --- Admin --------------------------------------------------------------
@@ -1346,6 +1395,24 @@ const handleLogout = async () => {
               <div className="board-label">{activeBusiness.name} — Ora in servizio</div>
               <FlapNumber value={currentOggi} size="lg" />
 
+              {allertaCodaLunga && (
+                <div className="turn-banner" style={{ background: "#B7472A", color: "#F1ECDA" }}>
+                  <AlertTriangle size={20} />
+                  <div>
+                    Coda lunga:{" "}
+                    {sogliaCodaSuperata && `${inCoda} persone in coda (soglia: ${activeBusiness.soglia_coda})`}
+                    {sogliaCodaSuperata && sogliaAttesaSuperata && " · "}
+                    {sogliaAttesaSuperata && `attesa stimata ~${attesaStimataCoda} min (soglia: ${activeBusiness.soglia_attesa} min)`}
+                  </div>
+                </div>
+              )}
+
+              {(activeBusiness.soglia_coda != null || activeBusiness.soglia_attesa != null) && !notificheAttive && (
+                <button className="cta ghost" style={{ fontSize: 12, padding: "8px 10px" }} onClick={attivaNotificheBrowser}>
+                  <Bell size={13} /> Attiva notifiche browser per la coda lunga
+                </button>
+              )}
+
               <div className="op-actions">
                 <button className="cta primary" onClick={avanti} disabled={inCoda === 0}>
                   <ArrowRight size={16} /> Avanti
@@ -1660,6 +1727,33 @@ const handleLogout = async () => {
                       {g.label}
                     </button>
                   ))}
+                </div>
+
+                <label className="field-label">Avviso coda lunga (opzionale)</label>
+                <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: -4, marginBottom: 8 }}>
+                  Se superata, nel pannello operatore compare un avviso. Lascia vuoto per disattivare.
+                </p>
+                <div style={{ display: "flex", gap: 10 }}>
+                  <div style={{ flex: 1 }}>
+                    <input
+                      type="number"
+                      min="1"
+                      className="field-input"
+                      placeholder="Persone in coda"
+                      value={formSogliaCoda}
+                      onChange={(e) => setFormSogliaCoda(e.target.value)}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <input
+                      type="number"
+                      min="1"
+                      className="field-input"
+                      placeholder="Minuti di attesa"
+                      value={formSogliaAttesa}
+                      onChange={(e) => setFormSogliaAttesa(e.target.value)}
+                    />
+                  </div>
                 </div>
 
                 <button className="cta primary" onClick={salvaAttivita} disabled={!formName.trim()}>
