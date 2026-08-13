@@ -19,6 +19,9 @@ import {
   eliminaAttivita,
   ascoltaAggiornamenti,
   numeroBaseOggi,
+  staffDiAttivita,
+  rimuoviStaff,
+  statistichePerOperatore,
 } from "./lib/queries";
 import { esportaCsv, esportaPdf, apriQrPdf, condividiQrPdf } from "./lib/export";
 
@@ -93,6 +96,25 @@ function MiniBarChart({ labels, series, chiusi }) {
           </span>
         ))}
       </div>
+    </div>
+  );
+}
+
+// Confronto con lo stesso periodo precedente (es. oggi vs ieri, questo mese
+// vs il mese scorso). "invertito" = true per le metriche dove salire e'
+// un peggioramento (non presentati, attesa media), cosi' il colore riflette
+// se il numero e' andato meglio o peggio, non solo se e' salito o sceso.
+function Trend({ attuale, precedente, invertito = false }) {
+  if (attuale === 0 && precedente === 0) return null;
+  const diff = attuale - precedente;
+  if (diff === 0) {
+    return <div style={{ fontSize: 10, color: "#9FB3AC", marginTop: 3 }}>= periodo prec.</div>;
+  }
+  const migliorato = invertito ? diff < 0 : diff > 0;
+  const percentuale = precedente > 0 ? Math.round((Math.abs(diff) / precedente) * 100) : null;
+  return (
+    <div style={{ fontSize: 10, color: migliorato ? "#5FA97A" : "#B7472A", marginTop: 3 }}>
+      {diff > 0 ? "▲" : "▼"} {percentuale !== null ? `${percentuale}%` : Math.abs(diff)} vs prec.
     </div>
   );
 }
@@ -251,6 +273,24 @@ const handleLogout = async () => {
   const [erroreInvito, setErroreInvito] = useState("");
   const [invitoInCorso, setInvitoInCorso] = useState(false);
   const [attivitaDaInvitare, setAttivitaDaInvitare] = useState(null);
+  const [staffList, setStaffList] = useState([]);
+
+  const apriPannelloStaff = (b) => {
+    const apri = attivitaDaInvitare !== b.id;
+    setAttivitaDaInvitare(apri ? b.id : null);
+    if (apri) staffDiAttivita(b.id).then(setStaffList).catch(console.error);
+  };
+
+  const handleRimuoviStaff = async (businessId, userId) => {
+    const conferma = window.confirm("Rimuovere questo operatore dallo staff dell'attivita'?");
+    if (!conferma) return;
+    try {
+      await rimuoviStaff(businessId, userId);
+      setStaffList((prev) => prev.filter((s) => s.user_id !== userId));
+    } catch (e) {
+      alert("Errore nella rimozione: " + e.message);
+    }
+  };
 
   const ricaricaMieAttivita = () => {
     if (currentUser) mieAttivita(currentUser.id).then(setMieAttivitaList).catch(console.error);
@@ -287,6 +327,8 @@ const handleLogout = async () => {
   const [statsPeriodPage, setStatsPeriodPage] = useState("giorno");
   const [statsOffset, setStatsOffset] = useState(0);
   const [statsData, setStatsData] = useState({ serviti: 0, nonPresentati: 0, attesaMedia: 0 });
+  const [statsDataPrecedente, setStatsDataPrecedente] = useState({ serviti: 0, nonPresentati: 0, attesaMedia: 0 });
+  const [statsPerOperatore, setStatsPerOperatore] = useState([]);
   const [avgWaitToday, setAvgWaitToday] = useState(0);
   const andamentoVuoto = { labels: ORE_GIORNO, serviti: ORE_GIORNO.map(() => 0), nonPresentati: ORE_GIORNO.map(() => 0), attesaMedia: ORE_GIORNO.map(() => 0) };
   const [andamentoGiorno, setAndamentoGiorno] = useState(andamentoVuoto);
@@ -307,6 +349,8 @@ const handleLogout = async () => {
   useEffect(() => {
     if (view !== "statistiche" || !activeBusiness?.id) return;
     statisticheComplete(activeBusiness.id, statsPeriodPage, statsOffset).then(setStatsData).catch(console.error);
+    // Stesso periodo, uno indietro: serve per il confronto "vs periodo precedente".
+    statisticheComplete(activeBusiness.id, statsPeriodPage, statsOffset - 1).then(setStatsDataPrecedente).catch(console.error);
     andamentoPeriodo(
       activeBusiness.id,
       statsPeriodPage,
@@ -314,6 +358,7 @@ const handleLogout = async () => {
       activeBusiness.ora_apertura,
       activeBusiness.ora_chiusura
     ).then(setAndamentoStats).catch(console.error);
+    statistichePerOperatore(activeBusiness.id, statsPeriodPage, statsOffset).then(setStatsPerOperatore).catch(console.error);
   }, [view, activeBusiness?.id, activeBusiness?.ora_apertura, activeBusiness?.ora_chiusura, statsPeriodPage, statsOffset]);
 
   const [registered, setRegistered] = useState(false);
@@ -1204,6 +1249,26 @@ const handleLogout = async () => {
                           >
                             Condividi link invito
                           </button>
+
+                          <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid rgba(159,179,172,0.15)" }}>
+                            <div style={{ fontSize: 11, color: "#9FB3AC", marginBottom: 6 }}>Staff attuale</div>
+                            {staffList.length === 0 ? (
+                              <p style={{ fontSize: 12, color: "#9FB3AC" }}>Nessun operatore invitato per ora.</p>
+                            ) : (
+                              staffList.map((s) => (
+                                <div key={s.user_id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "6px 0" }}>
+                                  <span style={{ fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.email}</span>
+                                  <button
+                                    className="cta ghost"
+                                    style={{ margin: 0, width: "auto", padding: "4px 10px", fontSize: 11.5, color: "#B7472A", borderColor: "rgba(183,71,42,0.4)", flexShrink: 0 }}
+                                    onClick={() => handleRimuoviStaff(b.id, s.user_id)}
+                                  >
+                                    Rimuovi
+                                  </button>
+                                </div>
+                              ))
+                            )}
+                          </div>
                         </div>
                       )}
 
@@ -1222,9 +1287,9 @@ const handleLogout = async () => {
                           <button
                             className="cta dark"
                             style={{ flex: 1, minWidth: 0 }}
-                            onClick={() => setAttivitaDaInvitare(attivitaDaInvitare === b.id ? null : b.id)}
+                            onClick={() => apriPannelloStaff(b)}
                           >
-                            Invita
+                            Staff
                           </button>
                           <button className="cta" style={{ flex: 1, minWidth: 0, background: "#C0392B", color: "#F1ECDA", border: "none" }} onClick={() => handleElimina(b)}>
                             Elimina
@@ -1469,14 +1534,17 @@ const handleLogout = async () => {
                   <div className="stat-box">
                     <div className="stat-num">{statsData.serviti}</div>
                     <div className="stat-lbl">Serviti</div>
+                    <Trend attuale={statsData.serviti} precedente={statsDataPrecedente.serviti} />
                   </div>
                   <div className="stat-box">
                     <div className="stat-num">{statsData.attesaMedia}m</div>
                     <div className="stat-lbl">Attesa media</div>
+                    <Trend attuale={statsData.attesaMedia} precedente={statsDataPrecedente.attesaMedia} invertito />
                   </div>
                   <div className="stat-box">
                     <div className="stat-num" style={{ color: "#B7472A" }}>{statsData.nonPresentati}</div>
                     <div className="stat-lbl">Non presentati ({percentualeNonPresenti(statsData.serviti, statsData.nonPresentati)}%)</div>
+                    <Trend attuale={statsData.nonPresentati} precedente={statsDataPrecedente.nonPresentati} invertito />
                   </div>
                 </div>
 
@@ -1504,6 +1572,22 @@ const handleLogout = async () => {
                 <p style={{ fontSize: 11, color: "#9FB3AC", marginTop: 10, textAlign: "center" }}>
                   Per fascia del periodo selezionato
                 </p>
+
+                <div className="board-label" style={{ marginTop: 18 }}>Per operatore</div>
+                {statsPerOperatore.length === 0 ? (
+                  <p style={{ fontSize: 12.5, color: "#9FB3AC" }}>Nessun ticket gestito in questo periodo.</p>
+                ) : (
+                  <div className="admin-list">
+                    {statsPerOperatore.map((op) => (
+                      <div className="admin-card" key={op.user_id} style={{ padding: 12 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{op.email}</div>
+                        <div style={{ fontSize: 12, color: "#9FB3AC", marginTop: 4 }}>
+                          {op.serviti} serviti · {op.non_presentati} non presentati ({percentualeNonPresenti(op.serviti, op.non_presentati)}%)
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </>
             )}
           </div>

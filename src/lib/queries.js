@@ -287,6 +287,37 @@ export async function unisciAttivita(inviteCode) {
   return data;
 }
 
+// --- Proprietario: elenco staff e rimozione -------------------------------
+export async function staffDiAttivita(businessId) {
+  const { data, error } = await supabase.rpc("staff_di_attivita", {
+    business_id_input: businessId,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function rimuoviStaff(businessId, userId) {
+  const { error } = await supabase
+    .from("business_staff")
+    .delete()
+    .eq("business_id", businessId)
+    .eq("user_id", userId);
+  if (error) throw error;
+}
+
+// --- Statistiche: serviti/non presentati per operatore, per periodo -------
+export async function statistichePerOperatore(businessId, periodo, offset = 0) {
+  const from = dataInizioPeriodo(periodo, offset).toISOString();
+  const to = dataFinePeriodo(periodo, offset).toISOString();
+  const { data, error } = await supabase.rpc("statistiche_per_operatore", {
+    business_id_input: businessId,
+    da: from,
+    a: to,
+  });
+  if (error) throw error;
+  return data;
+}
+
 export async function eliminaAttivita(businessId) {
   const { error } = await supabase
     .from("businesses")
