@@ -317,6 +317,9 @@ const handleLogout = async () => {
   }, [view, activeBusiness?.id, activeBusiness?.ora_apertura, activeBusiness?.ora_chiusura, statsPeriodPage, statsOffset]);
 
   const [registered, setRegistered] = useState(false);
+  // Attivita' in fase di modifica (form "Crea Attivita'" riusato per
+  // editare): null quando si sta creando una nuova attivita'.
+  const [attivitaInModifica, setAttivitaInModifica] = useState(null);
   const [businesses, setBusinesses] = useState([]);
   const [adminSearch, setAdminSearch] = useState("");
   const [formName, setFormName] = useState("");
@@ -510,8 +513,30 @@ const handleLogout = async () => {
     }
   };
 
-  // --- Registrazione ------------------------------------------------------
-  const generaAttivita = async () => {
+  // --- Registrazione / modifica --------------------------------------------
+  // Precompila il form con i dati di un'attivita' esistente e passa in
+  // modalita' modifica: il proprietario puo' cosi' correggere nome, orari,
+  // giorni di apertura ecc. senza dover eliminare e ricreare l'attivita'.
+  const avviaModifica = (b) => {
+    setFormName(b.name);
+    setFormAddress(b.address || "");
+    setFormType(b.type);
+    setFormOraApertura(b.ora_apertura ?? 9);
+    setFormOraChiusura(b.ora_chiusura ?? 20);
+    setFormGiorniApertura(b.giorni_apertura ?? TUTTI_I_GIORNI);
+    setAttivitaInModifica(b);
+    setRegistered(false);
+    setErrore("");
+    setView("registrazione");
+  };
+
+  const annullaModifica = () => {
+    setAttivitaInModifica(null);
+    nuovaRegistrazione();
+    setView("operatore");
+  };
+
+  const salvaAttivita = async () => {
     if (!formName.trim()) return;
     if (formOraChiusura <= formOraApertura) {
       setErrore("L'orario di chiusura deve essere dopo quello di apertura");
@@ -522,21 +547,46 @@ const handleLogout = async () => {
       return;
     }
     setErrore("");
+
+    const datiComuni = {
+      name: formName.trim(),
+      address: formAddress.trim(),
+      type: formType,
+      ora_apertura: formOraApertura,
+      ora_chiusura: formOraChiusura,
+      giorni_apertura: formGiorniApertura,
+    };
+
+    if (attivitaInModifica) {
+      const { data, error } = await supabase
+        .from("businesses")
+        .update(datiComuni)
+        .eq("id", attivitaInModifica.id)
+        .select()
+        .single();
+
+      if (error) {
+        setErrore("Errore nel salvataggio: " + error.message);
+        return;
+      }
+
+      setAttivitaInModifica(null);
+      if (activeBusiness?.id === data.id) setActiveBusiness(data);
+      ricaricaMieAttivita();
+      setView("operatore");
+      return;
+    }
+
     const rand = Math.random().toString(16).slice(2, 6);
     const slug = `${slugify(formName) || "attivita"}-${rand}`;
     const { data, error } = await supabase
       .from("businesses")
       .insert({
-        name: formName.trim(),
-        address: formAddress.trim(),
-        type: formType,
+        ...datiComuni,
         slug,
         current: 0,
         last_issued: 0,
-        ora_apertura: formOraApertura,
-        ora_chiusura: formOraChiusura,
-        giorni_apertura: formGiorniApertura,
-owner_id: currentUser.id,
+        owner_id: currentUser.id,
       })
       .select()
       .single();
@@ -993,7 +1043,7 @@ owner_id: currentUser.id,
             <button className={"tab-btn" + (view === "operatore" ? " active" : "")} onClick={() => setView("operatore")}>Operatore</button>
           )}
           {isLoggedIn && (
-            <button className={"tab-btn" + (view === "registrazione" ? " active" : "")} onClick={() => setView("registrazione")}>Crea Attività</button>
+            <button className={"tab-btn" + (view === "registrazione" ? " active" : "")} onClick={() => { setAttivitaInModifica(null); nuovaRegistrazione(); setView("registrazione"); }}>Crea Attività</button>
           )}
           {isAdmin && (
             <button className={"tab-btn" + (view === "admin" ? " active" : "")} onClick={() => setView("admin")}>Admin</button>
@@ -1162,6 +1212,13 @@ owner_id: currentUser.id,
                           Gestisci
                         </button>
                         {b.ruolo === "proprietario" && (
+                          <button className="cta dark" style={{ flex: 1, minWidth: 0 }} onClick={() => avviaModifica(b)}>
+                            Modifica
+                          </button>
+                        )}
+                      </div>
+                      {b.ruolo === "proprietario" && (
+                        <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
                           <button
                             className="cta dark"
                             style={{ flex: 1, minWidth: 0 }}
@@ -1169,13 +1226,11 @@ owner_id: currentUser.id,
                           >
                             Invita
                           </button>
-                        )}
-                        {b.ruolo === "proprietario" && (
                           <button className="cta" style={{ flex: 1, minWidth: 0, background: "#C0392B", color: "#F1ECDA", border: "none" }} onClick={() => handleElimina(b)}>
                             Elimina
                           </button>
-                        )}
-                      </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1331,6 +1386,11 @@ owner_id: currentUser.id,
                     <button className="cta dark" style={{ flex: 1, minWidth: 0, opacity: 0.75 }} onClick={() => { selezionaAttivita(b); setView("statistiche"); }}>
                       Statistiche
                     </button>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                    <button className="cta dark" style={{ flex: 1, minWidth: 0 }} onClick={() => avviaModifica(b)}>
+                      Modifica
+                    </button>
                     <button className="cta" style={{ flex: 1, minWidth: 0, background: "#C0392B", color: "#F1ECDA", border: "none" }} onClick={() => handleElimina(b)}>
                       Elimina
                     </button>
@@ -1451,7 +1511,7 @@ owner_id: currentUser.id,
           <div className="board-panel">
             {!registered ? (
               <>
-                <div className="board-label"><Building2 size={13} style={{ display: "inline", marginRight: 6, position: "relative", top: -1 }} />Registra la tua attivita'</div>
+                <div className="board-label"><Building2 size={13} style={{ display: "inline", marginRight: 6, position: "relative", top: -1 }} />{attivitaInModifica ? "Modifica attivita'" : "Registra la tua attivita'"}</div>
 
                 <label className="field-label">Nome attivita'</label>
                 <input
@@ -1518,12 +1578,22 @@ owner_id: currentUser.id,
                   ))}
                 </div>
 
-                <button className="cta primary" onClick={generaAttivita} disabled={!formName.trim()}>
-                  <Plus size={16} /> Crea attivita' e genera QR
+                <button className="cta primary" onClick={salvaAttivita} disabled={!formName.trim()}>
+                  {attivitaInModifica ? (
+                    <><Check size={16} /> Salva modifiche</>
+                  ) : (
+                    <><Plus size={16} /> Crea attivita' e genera QR</>
+                  )}
                 </button>
-                <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: 10, textAlign: "center" }}>
-                  Ogni attivita' ottiene un QR code univoco collegato alla propria coda.
-                </p>
+                {attivitaInModifica ? (
+                  <button className="cta ghost" onClick={annullaModifica}>
+                    Annulla
+                  </button>
+                ) : (
+                  <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: 10, textAlign: "center" }}>
+                    Ogni attivita' ottiene un QR code univoco collegato alla propria coda.
+                  </p>
+                )}
               </>
             ) : (
               <>
