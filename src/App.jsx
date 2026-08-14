@@ -24,6 +24,7 @@ import {
   statistichePerOperatore,
 } from "./lib/queries";
 import { esportaCsv, esportaPdf, apriQrPdf, condividiQrPdf } from "./lib/export";
+import { sottoscriviPush } from "./lib/push";
 
 function Flap({ char }) {
   const [display, setDisplay] = useState(char);
@@ -454,6 +455,16 @@ const handleLogout = async () => {
     }
     const permesso = await Notification.requestPermission();
     setNotificheAttive(permesso === "granted");
+    if (permesso === "granted" && activeBusiness && currentUser) {
+      // Sottoscrizione push vera (arriva anche ad app chiusa, se
+      // installata): se fallisce non blocca la notifica "leggera" sopra,
+      // che resta comunque attiva finche' la scheda e' aperta.
+      try {
+        await sottoscriviPush({ businessId: activeBusiness.id, userId: currentUser.id });
+      } catch (e) {
+        console.error("Sottoscrizione push non riuscita:", e);
+      }
+    }
   };
 
   // Notifica browser (solo se la scheda e' aperta, anche in background):
@@ -492,6 +503,17 @@ const handleLogout = async () => {
     }
     const permesso = await Notification.requestPermission();
     setNotificheClienteAttive(permesso === "granted");
+    if (permesso === "granted" && activeBusiness && myTicket !== null) {
+      // Sottoscrizione push vera: se il cliente chiude del tutto la scheda,
+      // la notifica "leggera" sopra non potrebbe arrivare, questa si'
+      // (se l'app e' installata come PWA -- su iOS serve l'installazione
+      // anche solo per ricevere il push mentre e' in background).
+      try {
+        await sottoscriviPush({ businessId: activeBusiness.id, ticketNumber: myTicket });
+      } catch (e) {
+        console.error("Sottoscrizione push non riuscita:", e);
+      }
+    }
   };
 
   useEffect(() => {
