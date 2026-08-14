@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, BarChart3, MapPin, Tag, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Printer, AlertTriangle } from "lucide-react";
+import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, BarChart3, MapPin, Tag, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Printer, AlertTriangle, Download } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "./lib/supabaseClient";
 import Login from "./components/Login";
@@ -189,6 +189,42 @@ const [currentUser, setCurrentUser] = useState(null);
   // permessi elevati, quindi e' l'unico posto sicuro da cui leggere il ruolo.
   const isAdmin = currentUser?.app_metadata?.role === "admin";
   const [recuperoPassword, setRecuperoPassword] = useState(false);
+
+  // Banner "Installa l'app": Chrome/Edge su Android emettono l'evento
+  // "beforeinstallprompt" quando il sito e' installabile, ma di default
+  // lo mostrano solo in un menu poco visibile -- lo intercettiamo per
+  // proporre noi un pulsante esplicito. Su iOS Safari questo evento non
+  // esiste affatto: li' l'unico modo resta "Condividi -> Aggiungi a Home".
+  const [installPrompt, setInstallPrompt] = useState(null);
+  const [installNascosto, setInstallNascosto] = useState(
+    () => localStorage.getItem("prossimo_install_nascosto") === "1"
+  );
+
+  useEffect(() => {
+    const onBeforeInstall = (e) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+    const onInstalled = () => setInstallPrompt(null);
+    window.addEventListener("beforeinstallprompt", onBeforeInstall);
+    window.addEventListener("appinstalled", onInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBeforeInstall);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
+  }, []);
+
+  const installaApp = async () => {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    await installPrompt.userChoice;
+    setInstallPrompt(null);
+  };
+
+  const nascondiInstallBanner = () => {
+    setInstallNascosto(true);
+    localStorage.setItem("prossimo_install_nascosto", "1");
+  };
 
   // Ripristina la sessione gia' attiva (es. dopo un refresh della pagina):
   // Supabase mantiene il token in localStorage, ma senza questo lo stato
@@ -1158,6 +1194,35 @@ const handleLogout = async () => {
 
       <div className="wrap">
         <div className="wordmark"><span className="dot" />Prossimo</div>
+
+        {installPrompt && !installNascosto && (
+          <div style={{
+            marginTop: 14,
+            background: "#0F211D",
+            borderRadius: 12,
+            padding: "10px 12px",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+          }}>
+            <Download size={16} color="#C99A3E" style={{ flexShrink: 0 }} />
+            <span style={{ flex: 1, fontSize: 12, color: "#F1ECDA" }}>Installa Prossimo sulla schermata Home</span>
+            <button
+              className="cta primary"
+              style={{ margin: 0, width: "auto", padding: "7px 12px", fontSize: 12, flexShrink: 0 }}
+              onClick={installaApp}
+            >
+              Installa
+            </button>
+            <button
+              onClick={nascondiInstallBanner}
+              aria-label="Nascondi"
+              style={{ background: "none", border: "none", color: "#9FB3AC", cursor: "pointer", padding: 4, flexShrink: 0, display: "flex" }}
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
 
         {recuperoPassword ? (
           <ImpostaNuovaPassword
