@@ -1239,7 +1239,18 @@ const handleLogout = async () => {
             <button
               onClick={nascondiInstallBanner}
               aria-label="Nascondi"
-              style={{ background: "none", border: "none", color: "#9FB3AC", cursor: "pointer", padding: 4, flexShrink: 0, display: "flex" }}
+              style={{
+                background: "none",
+                border: "none",
+                color: "#9FB3AC",
+                cursor: "pointer",
+                width: 36,
+                height: 36,
+                flexShrink: 0,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
             >
               <X size={14} />
             </button>
@@ -1441,7 +1452,7 @@ const handleLogout = async () => {
                                   <span style={{ fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.email}</span>
                                   <button
                                     className="cta ghost"
-                                    style={{ margin: 0, width: "auto", padding: "4px 10px", fontSize: 11.5, color: "#B7472A", borderColor: "rgba(183,71,42,0.4)", flexShrink: 0 }}
+                                    style={{ margin: 0, width: "auto", padding: "9px 12px", fontSize: 11.5, color: "#B7472A", borderColor: "rgba(183,71,42,0.4)", flexShrink: 0 }}
                                     onClick={() => handleRimuoviStaff(b.id, s.user_id)}
                                   >
                                     Rimuovi
@@ -1576,7 +1587,9 @@ const handleLogout = async () => {
                 </div>
               </div>
 
-              <div className="board-label" style={{ marginTop: 20 }}>In attesa</div>
+              <div className="stats-divider" style={{ marginTop: 18 }} />
+
+              <div className="board-label">In attesa</div>
               <div className="queue-strip">
                 {Array.from({ length: inCoda }).map((_, i) => (
                   <span className="queue-chip" key={i}>#{currentOggi + i + 1}</span>
@@ -1772,7 +1785,9 @@ const handleLogout = async () => {
                   Per fascia del periodo selezionato
                 </p>
 
-                <div className="board-label" style={{ marginTop: 18 }}>Per operatore</div>
+                <div className="stats-divider" />
+
+                <div className="board-label">Per operatore</div>
                 {statsPerOperatore.length === 0 ? (
                   <p style={{ fontSize: 12.5, color: "#9FB3AC" }}>Nessun ticket gestito in questo periodo.</p>
                 ) : (

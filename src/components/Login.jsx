@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { LogIn, UserPlus, KeyRound, ArrowLeft } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import PasswordInput from './PasswordInput';
 
@@ -93,33 +94,31 @@ export default function Login({ onLoginSuccess }) {
 
   if (modalita === 'recupero') {
     return (
-      <div style={{ maxWidth: 400, margin: '50px auto', padding: 20 }}>
-        <h2>Recupera password</h2>
+      <div className="board-panel">
+        <div className="board-label"><KeyRound size={13} style={{ display: 'inline', marginRight: 6, position: 'relative', top: -1 }} />Recupera password</div>
         {messaggio ? (
           <>
-            <p>{messaggio}</p>
-            <button type="button" onClick={() => cambiaModalita('login')} style={{ width: '100%', padding: 10 }}>
-              Torna al login
+            <p style={{ fontSize: 13, color: '#9FB3AC', marginTop: 10 }}>{messaggio}</p>
+            <button type="button" className="cta ghost" onClick={() => cambiaModalita('login')}>
+              <ArrowLeft size={15} /> Torna al login
             </button>
           </>
         ) : (
           <form onSubmit={handleRecupero}>
-            <div style={{ marginBottom: 12 }}>
-              <label>Email</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                style={{ width: '100%', padding: 8 }}
-              />
-            </div>
-            {errore && <p style={{ color: 'red' }}>{errore}</p>}
-            <button type="submit" disabled={caricamento} style={{ width: '100%', padding: 10 }}>
+            <label className="field-label" style={{ marginTop: 0 }}>Email</label>
+            <input
+              type="email"
+              className="field-input"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+            {errore && <div className="error-box">{errore}</div>}
+            <button type="submit" className="cta primary" disabled={caricamento}>
               {caricamento ? 'Invio in corso...' : 'Invia email di recupero'}
             </button>
-            <button type="button" onClick={() => cambiaModalita('login')} style={{ width: '100%', padding: 10, marginTop: 8 }}>
-              Torna al login
+            <button type="button" className="cta ghost" onClick={() => cambiaModalita('login')}>
+              <ArrowLeft size={15} /> Torna al login
             </button>
           </form>
         )}
@@ -129,41 +128,35 @@ export default function Login({ onLoginSuccess }) {
 
   if (modalita === 'registrazione') {
     return (
-      <div style={{ maxWidth: 400, margin: '50px auto', padding: 20 }}>
-        <h2>Registrati come operatore</h2>
+      <div className="board-panel">
+        <div className="board-label"><UserPlus size={13} style={{ display: 'inline', marginRight: 6, position: 'relative', top: -1 }} />Registrati come operatore</div>
         {messaggio ? (
           <>
-            <p>{messaggio}</p>
-            <button type="button" onClick={() => cambiaModalita('login')} style={{ width: '100%', padding: 10 }}>
-              Torna al login
+            <p style={{ fontSize: 13, color: '#9FB3AC', marginTop: 10 }}>{messaggio}</p>
+            <button type="button" className="cta ghost" onClick={() => cambiaModalita('login')}>
+              <ArrowLeft size={15} /> Torna al login
             </button>
           </>
         ) : (
           <form onSubmit={handleRegistrazione}>
-            <div style={{ marginBottom: 12 }}>
-              <label>Email</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                style={{ width: '100%', padding: 8 }}
-              />
-            </div>
-            <div style={{ marginBottom: 12 }}>
-              <label>Password</label>
-              <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} required />
-            </div>
-            <div style={{ marginBottom: 12 }}>
-              <label>Conferma password</label>
-              <PasswordInput value={confermaPassword} onChange={(e) => setConfermaPassword(e.target.value)} required />
-            </div>
-            {errore && <p style={{ color: 'red' }}>{errore}</p>}
-            <button type="submit" disabled={caricamento} style={{ width: '100%', padding: 10 }}>
+            <label className="field-label" style={{ marginTop: 0 }}>Email</label>
+            <input
+              type="email"
+              className="field-input"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+            <label className="field-label">Password</label>
+            <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} required />
+            <label className="field-label">Conferma password</label>
+            <PasswordInput value={confermaPassword} onChange={(e) => setConfermaPassword(e.target.value)} required />
+            {errore && <div className="error-box">{errore}</div>}
+            <button type="submit" className="cta primary" disabled={caricamento}>
               {caricamento ? 'Registrazione in corso...' : 'Registrati'}
             </button>
-            <button type="button" onClick={() => cambiaModalita('login')} style={{ width: '100%', padding: 10, marginTop: 8 }}>
-              Torna al login
+            <button type="button" className="cta ghost" onClick={() => cambiaModalita('login')}>
+              <ArrowLeft size={15} /> Torna al login
             </button>
           </form>
         )}
@@ -172,35 +165,44 @@ export default function Login({ onLoginSuccess }) {
   }
 
   return (
-    <div style={{ maxWidth: 400, margin: '50px auto', padding: 20 }}>
-      <h2>Accesso Operatore</h2>
+    <div className="board-panel">
+      <div className="board-label"><LogIn size={13} style={{ display: 'inline', marginRight: 6, position: 'relative', top: -1 }} />Accesso operatore</div>
       <form onSubmit={handleLogin}>
-        <div style={{ marginBottom: 12 }}>
-          <label>Email</label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            style={{ width: '100%', padding: 8 }}
-          />
-        </div>
-        <div style={{ marginBottom: 12 }}>
-          <label>Password</label>
-          <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} required />
-        </div>
-        {errore && <p style={{ color: 'red' }}>{errore}</p>}
-        <button type="submit" disabled={caricamento} style={{ width: '100%', padding: 10 }}>
+        <label className="field-label" style={{ marginTop: 0 }}>Email</label>
+        <input
+          type="email"
+          className="field-input"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+        />
+        <label className="field-label">Password</label>
+        <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} required />
+        {errore && <div className="error-box">{errore}</div>}
+        <button type="submit" className="cta primary" disabled={caricamento}>
           {caricamento ? 'Accesso in corso...' : 'Accedi'}
         </button>
       </form>
-      <button type="button" onClick={() => cambiaModalita('registrazione')} style={{ width: '100%', padding: 10, marginTop: 8 }}>
-        Registrati
+      <button type="button" className="cta ghost" onClick={() => cambiaModalita('registrazione')}>
+        <UserPlus size={15} /> Registrati
       </button>
       <button
         type="button"
         onClick={() => cambiaModalita('recupero')}
-        style={{ width: '100%', padding: 10, marginTop: 8, background: 'none', border: 'none', textDecoration: 'underline', cursor: 'pointer' }}
+        style={{
+          background: 'none',
+          border: 'none',
+          color: '#9FB3AC',
+          fontSize: 12.5,
+          marginTop: 14,
+          padding: 0,
+          cursor: 'pointer',
+          textDecoration: 'underline',
+          textUnderlineOffset: '2px',
+          display: 'block',
+          width: '100%',
+          textAlign: 'center',
+        }}
       >
         Password dimenticata?
       </button>

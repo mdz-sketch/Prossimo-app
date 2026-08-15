@@ -8,11 +8,12 @@ export default function PasswordInput({ value, onChange, required, placeholder }
     <div style={{ position: 'relative' }}>
       <input
         type={visibile ? 'text' : 'password'}
+        className="field-input"
         value={value}
         onChange={onChange}
         required={required}
         placeholder={placeholder}
-        style={{ width: '100%', padding: 8, paddingRight: 36, boxSizing: 'border-box' }}
+        style={{ paddingRight: 44 }}
       />
       <button
         type="button"
@@ -20,16 +21,18 @@ export default function PasswordInput({ value, onChange, required, placeholder }
         aria-label={visibile ? 'Nascondi password' : 'Mostra password'}
         style={{
           position: 'absolute',
-          right: 6,
+          right: 2,
           top: '50%',
           transform: 'translateY(-50%)',
           background: 'none',
           border: 'none',
-          padding: 4,
+          width: 40,
+          height: 40,
           cursor: 'pointer',
           display: 'flex',
           alignItems: 'center',
-          color: '#666',
+          justifyContent: 'center',
+          color: '#9FB3AC',
         }}
       >
         {visibile ? <EyeOff size={16} /> : <Eye size={16} />}
