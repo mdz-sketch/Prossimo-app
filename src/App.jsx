@@ -1262,20 +1262,18 @@ const handleLogout = async () => {
           />
         ) : (
         <>
+        {isLoggedIn && (
         <div className="tabs">
-          {isLoggedIn && !isAdmin && (
+          {!isAdmin && (
             <button className={"tab-btn" + (view === "operatore" ? " active" : "")} onClick={() => setView("operatore")}>Operatore</button>
           )}
-          {isLoggedIn && (
-            <button className={"tab-btn" + (view === "registrazione" ? " active" : "")} onClick={() => { setAttivitaInModifica(null); nuovaRegistrazione(); setView("registrazione"); }}>Crea Attività</button>
-          )}
+          <button className={"tab-btn" + (view === "registrazione" ? " active" : "")} onClick={() => { setAttivitaInModifica(null); nuovaRegistrazione(); setView("registrazione"); }}>Crea Attività</button>
           {isAdmin && (
             <button className={"tab-btn" + (view === "admin" ? " active" : "")} onClick={() => setView("admin")}>Admin</button>
           )}
-          {isLoggedIn && (
-            <button className="tab-btn" onClick={handleLogout}>Esci</button>
-          )}
+          <button className="tab-btn" onClick={handleLogout}>Esci</button>
         </div>
+        )}
 
         {(view === "operatore" || view === "statistiche") && isLoggedIn && (
           <div style={{ marginTop: 10, marginBottom: -6, display: "flex", gap: 8 }}>
