@@ -1043,6 +1043,8 @@ const handleLogout = async () => {
           color: #9FB3AC;
           border-radius: 8px;
           padding: 5px 9px;
+          white-space: nowrap;
+          flex-shrink: 0;
         }
 
         .field-label {
@@ -1393,7 +1395,7 @@ const handleLogout = async () => {
                   {mieAttivitaList.map((b) => (
                     <div className="admin-card" key={b.id}>
                       <div className="admin-card-top">
-                        <div>
+                        <div style={{ minWidth: 0 }}>
                           <div className="admin-card-name">{b.name}</div>
                           <div className="admin-card-type"><Tag size={11} /> {b.type}</div>
                         </div>
@@ -1618,7 +1620,7 @@ const handleLogout = async () => {
               {businesses.map((b) => (
                 <div className="admin-card" key={b.id}>
                   <div className="admin-card-top">
-                    <div>
+                    <div style={{ minWidth: 0 }}>
                       <div className="admin-card-name">{b.name}</div>
                       <div className="admin-card-type"><Tag size={11} /> {b.type}</div>
                     </div>
