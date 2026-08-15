@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { KeyRound } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import PasswordInput from './PasswordInput';
 
@@ -34,19 +35,15 @@ export default function ImpostaNuovaPassword({ onCompletato }) {
   };
 
   return (
-    <div style={{ maxWidth: 400, margin: '50px auto', padding: 20 }}>
-      <h2>Imposta nuova password</h2>
+    <div className="board-panel">
+      <div className="board-label"><KeyRound size={13} style={{ display: 'inline', marginRight: 6, position: 'relative', top: -1 }} />Imposta nuova password</div>
       <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: 12 }}>
-          <label>Nuova password</label>
-          <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} required />
-        </div>
-        <div style={{ marginBottom: 12 }}>
-          <label>Conferma nuova password</label>
-          <PasswordInput value={conferma} onChange={(e) => setConferma(e.target.value)} required />
-        </div>
-        {errore && <p style={{ color: 'red' }}>{errore}</p>}
-        <button type="submit" disabled={caricamento} style={{ width: '100%', padding: 10 }}>
+        <label className="field-label" style={{ marginTop: 0 }}>Nuova password</label>
+        <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} required />
+        <label className="field-label">Conferma nuova password</label>
+        <PasswordInput value={conferma} onChange={(e) => setConferma(e.target.value)} required />
+        {errore && <div className="error-box">{errore}</div>}
+        <button type="submit" className="cta primary" disabled={caricamento}>
           {caricamento ? 'Salvataggio...' : 'Salva nuova password'}
         </button>
       </form>
