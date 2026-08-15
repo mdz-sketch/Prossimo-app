@@ -182,7 +182,7 @@ const statoApertura = (business, adesso) => {
 };
 
 export default function App() {
-  const [view, setView] = useState("cliente");
+  const [view, setView] = useState("operatore");
 const [currentUser, setCurrentUser] = useState(null);
   const isLoggedIn = currentUser !== null;
   // app_metadata (a differenza di user_metadata) non e' modificabile
@@ -273,7 +273,7 @@ const handleElimina = async (business) => {
 const handleLogout = async () => {
     await supabase.auth.signOut();
     setCurrentUser(null);
-    setView("cliente");
+    setView("operatore");
     setActiveBusiness(null);
     localStorage.removeItem("prossimo_active_business_id");
   };
@@ -293,10 +293,6 @@ const handleLogout = async () => {
   // Viene impostata registrando una nuova attivita' o scegliendo
   // "Gestisci" da un'attivita' esistente nel pannello Admin.
   const [activeBusiness, setActiveBusiness] = useState(null);
-  // true se si e' arrivati scansionando davvero il QR code (/coda/<slug>):
-  // un cliente cosi' non deve vedere il link "Accesso operatore / admin",
-  // pensato solo per chi apre l'app per gestire un'attivita'.
-  const [clienteDaScansione, setClienteDaScansione] = useState(false);
   // Aggiornato ogni minuto: fa ricalcolare se l'attivita' e' aperta o
   // chiusa anche se il cliente resta con la pagina ferma sullo schermo.
   const [oraCorrente, setOraCorrente] = useState(() => new Date());
@@ -571,7 +567,6 @@ const handleLogout = async () => {
           setActiveBusiness(data);
           localStorage.setItem("prossimo_active_business_id", data.id);
           setView("cliente");
-          setClienteDaScansione(true);
 
           // Attivita' chiusa in questo momento: non ha senso far prendere
           // un numero, si mostra invece il messaggio con l'orario di riapertura.
@@ -1268,9 +1263,6 @@ const handleLogout = async () => {
         ) : (
         <>
         <div className="tabs">
-          {!isLoggedIn && (
-            <button className={"tab-btn" + (view === "cliente" ? " active" : "")} onClick={() => setView("cliente")}>Cliente</button>
-          )}
           {isLoggedIn && !isAdmin && (
             <button className={"tab-btn" + (view === "operatore" ? " active" : "")} onClick={() => setView("operatore")}>Operatore</button>
           )}
@@ -1284,26 +1276,6 @@ const handleLogout = async () => {
             <button className="tab-btn" onClick={handleLogout}>Esci</button>
           )}
         </div>
-
-        {!isLoggedIn && !clienteDaScansione && (
-          <div style={{ textAlign: "center" }}>
-            <button
-              onClick={() => setView("operatore")}
-              style={{
-                background: "none",
-                border: "none",
-                color: "rgba(241,236,218,0.35)",
-                fontSize: 11.5,
-                marginTop: 14,
-                cursor: "pointer",
-                textDecoration: "underline",
-                textUnderlineOffset: "2px",
-              }}
-            >
-              Accesso operatore / admin
-            </button>
-          </div>
-        )}
 
         {(view === "operatore" || view === "statistiche") && isLoggedIn && (
           <div style={{ marginTop: 10, marginBottom: -6, display: "flex", gap: 8 }}>
@@ -1325,7 +1297,7 @@ const handleLogout = async () => {
             <div className="board-panel">
               <div className="board-label">Nessuna attivita' selezionata</div>
               <p style={{ fontSize: 13, color: "#9FB3AC" }}>
-                Scansiona il QR code esposto nel locale per prendere il tuo numero. Sei il gestore di un'attivita'? Usa "Accesso operatore / admin" qui sopra.
+                Scansiona il QR code esposto nel locale per prendere il tuo numero.
               </p>
             </div>
           ) : myTicket === null && statoOrari && !statoOrari.aperta ? (
