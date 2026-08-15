@@ -1600,8 +1600,6 @@ const handleLogout = async () => {
             <Login onLoginSuccess={handleLoginSuccess} />
           ) : (
           <div className="board-panel">
-            <button className="cta ghost" style={{ marginBottom: 12 }} onClick={() => setView("statistiche")}>Statistiche</button>
-
             <div className="search-box">
               <Search size={15} />
               <input
