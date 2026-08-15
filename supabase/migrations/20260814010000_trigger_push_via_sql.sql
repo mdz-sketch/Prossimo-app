@@ -36,7 +36,12 @@ begin
 end;
 $$;
 
+-- Solo quando current/last_issued cambiano davvero (avanti/richiama/non
+-- presente/nuovo numero): modificare nome, indirizzo, orari ecc. da
+-- "Modifica attivita'" non deve sprecare una chiamata alla function.
 drop trigger if exists trg_invia_push on businesses;
 create trigger trg_invia_push
 after update on businesses
-for each row execute function trigger_invia_push();
+for each row
+when (new.current is distinct from old.current or new.last_issued is distinct from old.last_issued)
+execute function trigger_invia_push();

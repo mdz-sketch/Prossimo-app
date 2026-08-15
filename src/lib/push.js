@@ -34,15 +34,19 @@ export async function sottoscriviPush({ businessId, userId, ticketNumber }) {
   }
 
   const { endpoint, keys } = subscription.toJSON();
-  const { error } = await supabase.from("push_subscriptions").insert({
-    business_id: businessId,
-    user_id: userId ?? null,
-    ticket_number: ticketNumber ?? null,
-    endpoint,
-    p256dh: keys.p256dh,
-    auth: keys.auth,
-  });
-  // Sottoscrizione gia' salvata in precedenza (stesso endpoint): va bene,
-  // non e' un errore da mostrare all'utente.
-  if (error && error.code !== "23505") throw error;
+  // upsert (non insert): lo stesso dispositivo puo' gia' avere una riga per
+  // questo stesso scopo (business+ruolo+ticket) da una sottoscrizione
+  // precedente -- va aggiornata, non duplicata o scartata in silenzio.
+  const { error } = await supabase.from("push_subscriptions").upsert(
+    {
+      business_id: businessId,
+      user_id: userId ?? null,
+      ticket_number: ticketNumber ?? null,
+      endpoint,
+      p256dh: keys.p256dh,
+      auth: keys.auth,
+    },
+    { onConflict: "endpoint,business_id,user_id,ticket_number" }
+  );
+  if (error) throw error;
 }
