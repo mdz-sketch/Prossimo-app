@@ -1397,7 +1397,7 @@ const handleLogout = async () => {
                           <div className="admin-card-name">{b.name}</div>
                           <div className="admin-card-type"><Tag size={11} /> {b.type}</div>
                         </div>
-                        <span className="queue-chip">{b.ruolo === "proprietario" ? "Tua" : "Gestita per conto di"}</span>
+                        <span className="queue-chip">{b.ruolo === "proprietario" ? `#${Math.max((b.last_issued ?? 0) - (b.current ?? 0), 0)} in coda` : "Gestita per conto di"}</span>
                       </div>
 
                       {attivitaDaInvitare === b.id && b.ruolo === "proprietario" && (
