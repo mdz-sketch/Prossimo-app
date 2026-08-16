@@ -201,6 +201,13 @@ export default function App() {
     if (pathParts[0] === "schermo" && pathParts[1]) return "schermo";
     return "operatore";
   });
+  // Vero solo se questa pagina e' stata aperta scansionando il QR code
+  // (/coda/<slug>): a un cliente cosi' non va MAI proposto di installare
+  // l'app, nemmeno su Android -- deve restare un flusso senza installazione.
+  const [arrivatoDaScansione] = useState(() => {
+    const pathParts = window.location.pathname.split("/").filter(Boolean);
+    return pathParts[0] === "coda";
+  });
 const [currentUser, setCurrentUser] = useState(null);
   const isLoggedIn = currentUser !== null;
   // app_metadata (a differenza di user_metadata) non e' modificabile
@@ -1507,7 +1514,7 @@ const handleLogout = async () => {
       <div className="wrap">
         <div className="wordmark"><span className="dot" />Prossimo</div>
 
-        {installPrompt && !installNascosto && (
+        {installPrompt && !installNascosto && !arrivatoDaScansione && (
           <div style={{
             marginTop: 14,
             background: "#0F211D",
