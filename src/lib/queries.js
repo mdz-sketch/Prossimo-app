@@ -349,6 +349,19 @@ export async function listaUtentiAdmin(query = "") {
   return data;
 }
 
+export async function modificaEmailUtenteAdmin(userId, nuovaEmail) {
+  const { error } = await supabase.rpc("admin_modifica_email_utente", {
+    user_id_input: userId,
+    nuova_email: nuovaEmail,
+  });
+  if (error) throw error;
+}
+
+export async function eliminaUtenteAdmin(userId) {
+  const { error } = await supabase.rpc("admin_elimina_utente", { user_id_input: userId });
+  if (error) throw error;
+}
+
 // --- Realtime: iscriviti agli aggiornamenti di un'attività ----------------
 export function ascoltaAggiornamenti(businessId, callback) {
   const channel = supabase
