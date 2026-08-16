@@ -914,9 +914,15 @@ const handleLogout = async () => {
     const statoSchermo = schermoData
       ? statoApertura({ ora_apertura: schermoData.ora_apertura, ora_chiusura: schermoData.ora_chiusura, giorni_apertura: schermoData.giorni_apertura }, new Date())
       : null;
+    // Dimensioni in "vmin" (percentuale del lato piu' corto dello schermo)
+    // invece che vw/px fissi: cosi' la resa resta la stessa sia in verticale
+    // che in orizzontale (tablet ruotato, PC, TV), il layout si adatta da
+    // solo senza bisogno di media query per ogni caso, e il rapporto fra
+    // contenuto e altezza disponibile resta costante qualunque sia il
+    // formato dello schermo -- niente overflow ne' testo troppo piccolo.
     return (
       <div style={{
-        minHeight: "100vh",
+        minHeight: "100dvh",
         background: "#0B1A16",
         color: "#F1ECDA",
         display: "flex",
@@ -924,46 +930,47 @@ const handleLogout = async () => {
         alignItems: "center",
         justifyContent: "center",
         fontFamily: "'IBM Plex Sans', sans-serif",
-        padding: 24,
+        padding: "4vmin",
         textAlign: "center",
+        boxSizing: "border-box",
       }}>
         <style>{`@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=IBM+Plex+Mono:wght@500;600;700&display=swap');`}</style>
         {schermoErrore ? (
-          <p style={{ fontSize: 20, color: "#9FB3AC" }}>{schermoErrore}</p>
+          <p style={{ fontSize: "clamp(16px, 3vmin, 28px)", color: "#9FB3AC" }}>{schermoErrore}</p>
         ) : !schermoData ? (
-          <p style={{ fontSize: 20, color: "#9FB3AC" }}>Caricamento...</p>
+          <p style={{ fontSize: "clamp(16px, 3vmin, 28px)", color: "#9FB3AC" }}>Caricamento...</p>
         ) : (
           <>
-            <div style={{ fontSize: 22, fontWeight: 800, fontFamily: "'Archivo', sans-serif", letterSpacing: "0.02em" }}>
+            <div style={{ fontSize: "clamp(16px, 3vmin, 30px)", fontWeight: 800, fontFamily: "'Archivo', sans-serif", letterSpacing: "0.02em" }}>
               {schermoData.nome}
             </div>
             {statoSchermo && !statoSchermo.aperta ? (
-              <p style={{ fontSize: 24, color: "#9FB3AC", marginTop: 40 }}>
+              <p style={{ fontSize: "clamp(16px, 3vmin, 28px)", color: "#9FB3AC", marginTop: "5vmin" }}>
                 Al momento siamo chiusi. {statoSchermo.prossimaAperturaLabel}.
               </p>
             ) : (
               <>
-                <div style={{ fontSize: 26, color: "#9FB3AC", marginTop: 50, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                <div style={{ fontSize: "clamp(14px, 2.6vmin, 26px)", color: "#9FB3AC", marginTop: "5vmin", letterSpacing: "0.08em", textTransform: "uppercase" }}>
                   Ora stiamo servendo
                 </div>
                 <div style={{
                   fontFamily: "'IBM Plex Mono', monospace",
                   fontWeight: 700,
-                  fontSize: "min(38vw, 320px)",
+                  fontSize: "clamp(90px, 28vmin, 440px)",
                   lineHeight: 1,
                   color: "#C99A3E",
-                  marginTop: 10,
+                  marginTop: "1.5vmin",
                 }}>
                   {schermoData.current_oggi}
                 </div>
-                <div style={{ display: "flex", gap: 40, marginTop: 60, flexWrap: "wrap", justifyContent: "center" }}>
+                <div style={{ display: "flex", gap: "8vmin", marginTop: "5vmin", flexWrap: "wrap", justifyContent: "center" }}>
                   <div>
-                    <div style={{ fontSize: "min(10vw, 64px)", fontWeight: 800, fontFamily: "'Archivo', sans-serif" }}>{schermoData.in_coda}</div>
-                    <div style={{ fontSize: 18, color: "#9FB3AC", marginTop: 6, letterSpacing: "0.05em", textTransform: "uppercase" }}>In attesa</div>
+                    <div style={{ fontSize: "clamp(28px, 8vmin, 76px)", fontWeight: 800, fontFamily: "'Archivo', sans-serif" }}>{schermoData.in_coda}</div>
+                    <div style={{ fontSize: "clamp(11px, 1.8vmin, 18px)", color: "#9FB3AC", marginTop: "1.5vmin", letterSpacing: "0.05em", textTransform: "uppercase" }}>In attesa</div>
                   </div>
                   <div>
-                    <div style={{ fontSize: "min(10vw, 64px)", fontWeight: 800, fontFamily: "'Archivo', sans-serif" }}>~{schermoData.attesa_media_min}m</div>
-                    <div style={{ fontSize: 18, color: "#9FB3AC", marginTop: 6, letterSpacing: "0.05em", textTransform: "uppercase" }}>Attesa media</div>
+                    <div style={{ fontSize: "clamp(28px, 8vmin, 76px)", fontWeight: 800, fontFamily: "'Archivo', sans-serif" }}>~{schermoData.attesa_media_min}m</div>
+                    <div style={{ fontSize: "clamp(11px, 1.8vmin, 18px)", color: "#9FB3AC", marginTop: "1.5vmin", letterSpacing: "0.05em", textTransform: "uppercase" }}>Attesa media</div>
                   </div>
                 </div>
               </>
