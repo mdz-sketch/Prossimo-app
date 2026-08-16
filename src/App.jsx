@@ -232,7 +232,10 @@ const [currentUser, setCurrentUser] = useState(null);
   // dell'app perdeva comunque il login ad ogni ricaricamento.
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) setCurrentUser(session.user);
+      if (session?.user) {
+        setCurrentUser(session.user);
+        if (session.user.app_metadata?.role === "admin") setView("admin");
+      }
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange((event) => {
@@ -287,6 +290,10 @@ const handleLogout = async () => {
       setActiveBusiness(null);
       localStorage.removeItem("prossimo_active_business_id");
     }
+    // Un admin non gestisce di norma attivita' proprie: portarlo dritto
+    // sulla lista di tutte le attivita', non sulla schermata "Le tue
+    // attivita'" pensata per gli operatori.
+    if (user?.app_metadata?.role === "admin") setView("admin");
   };
 
   // Attivita' attualmente "attiva" per le viste Cliente/Operatore.
