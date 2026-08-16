@@ -914,67 +914,136 @@ const handleLogout = async () => {
     const statoSchermo = schermoData
       ? statoApertura({ ora_apertura: schermoData.ora_apertura, ora_chiusura: schermoData.ora_chiusura, giorni_apertura: schermoData.giorni_apertura }, new Date())
       : null;
-    // Dimensioni in "vmin" (percentuale del lato piu' corto dello schermo)
-    // invece che vw/px fissi: cosi' la resa resta la stessa sia in verticale
-    // che in orizzontale (tablet ruotato, PC, TV), il layout si adatta da
-    // solo senza bisogno di media query per ogni caso, e il rapporto fra
-    // contenuto e altezza disponibile resta costante qualunque sia il
-    // formato dello schermo -- niente overflow ne' testo troppo piccolo.
+    // Tutti i numeri in coda: current/last_issued avanzano sempre di 1 per
+    // azione (Avanti o Assente entrambi incrementano "current", vedi
+    // avanza_numero_atomico/non_presente_atomico), quindi l'intervallo fra
+    // il numero servito e l'ultimo emesso e' sempre una sequenza continua,
+    // senza buchi -- si puo' generare senza dover leggere i singoli ticket.
+    const MAX_NUMERI_MOSTRATI = 60;
+    const numeriInCoda = schermoData
+      ? Array.from({ length: Math.min(schermoData.in_coda, MAX_NUMERI_MOSTRATI) }, (_, i) => schermoData.current_oggi + 1 + i)
+      : [];
+    const altriInCoda = schermoData ? Math.max(schermoData.in_coda - MAX_NUMERI_MOSTRATI, 0) : 0;
+    // Piu' numeri ci sono, piu' piccoli devono stare per continuare a
+    // starci tutti: la dimensione dei singoli numeri e' calcolata qui (non
+    // in CSS) perche' dipende dal conteggio, non dalla sola grandezza dello
+    // schermo.
+    const n = numeriInCoda.length;
+    const chipVmin = n <= 6 ? 7 : n <= 12 ? 5.5 : n <= 24 ? 4 : n <= 40 ? 3 : 2.2;
+
     return (
-      <div style={{
-        minHeight: "100dvh",
-        background: "#0B1A16",
-        color: "#F1ECDA",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        fontFamily: "'IBM Plex Sans', sans-serif",
-        padding: "4vmin",
-        textAlign: "center",
-        boxSizing: "border-box",
-      }}>
-        <style>{`@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=IBM+Plex+Mono:wght@500;600;700&display=swap');`}</style>
+      <div className="schermo-wrap">
+        <style>{`
+          @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=IBM+Plex+Mono:wght@500;600;700&display=swap');
+          .schermo-wrap {
+            min-height: 100dvh;
+            background: #0B1A16;
+            color: #F1ECDA;
+            display: flex;
+            flex-direction: column;
+            font-family: 'IBM Plex Sans', sans-serif;
+            box-sizing: border-box;
+          }
+          .schermo-wrap * { box-sizing: border-box; }
+          .schermo-center {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 4vmin;
+            text-align: center;
+          }
+          .schermo-header {
+            text-align: center;
+            padding: 3vmin 4vmin 0;
+            font-size: clamp(16px, 3vmin, 30px);
+            font-weight: 800;
+            font-family: 'Archivo', sans-serif;
+            letter-spacing: 0.02em;
+          }
+          .schermo-split { display: flex; flex: 1; min-height: 0; }
+          .schermo-col {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 3vmin;
+            min-width: 0;
+            min-height: 0;
+            text-align: center;
+          }
+          .schermo-col-serve { border-right: 1px solid rgba(241,236,218,0.15); }
+          .schermo-label {
+            font-size: clamp(13px, 2.2vmin, 24px);
+            color: #9FB3AC;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-bottom: 2vmin;
+          }
+          .schermo-numero-servito {
+            font-family: 'IBM Plex Mono', monospace;
+            font-weight: 700;
+            font-size: clamp(70px, 20vmin, 360px);
+            line-height: 1;
+            color: #C99A3E;
+          }
+          .schermo-coda-grid { display: flex; flex-wrap: wrap; gap: 1.2vmin; justify-content: center; align-items: center; }
+          .schermo-coda-chip {
+            font-family: 'IBM Plex Mono', monospace;
+            font-weight: 700;
+            background: rgba(241,236,218,0.08);
+            border-radius: 1vmin;
+            padding: 0.7vmin 1.3vmin;
+            line-height: 1;
+          }
+          .schermo-coda-altri { font-size: clamp(11px, 1.6vmin, 16px); color: #9FB3AC; margin-top: 2vmin; }
+          .schermo-attesa-media { font-size: clamp(11px, 1.6vmin, 16px); color: #9FB3AC; margin-top: 2.5vmin; }
+          @media (orientation: portrait) {
+            .schermo-split { flex-direction: column; }
+            .schermo-col-serve { border-right: none; border-bottom: 1px solid rgba(241,236,218,0.15); }
+            .schermo-numero-servito { font-size: clamp(60px, 15vmin, 220px); }
+          }
+        `}</style>
         {schermoErrore ? (
-          <p style={{ fontSize: "clamp(16px, 3vmin, 28px)", color: "#9FB3AC" }}>{schermoErrore}</p>
+          <div className="schermo-center"><p style={{ fontSize: "clamp(16px, 3vmin, 28px)", color: "#9FB3AC" }}>{schermoErrore}</p></div>
         ) : !schermoData ? (
-          <p style={{ fontSize: "clamp(16px, 3vmin, 28px)", color: "#9FB3AC" }}>Caricamento...</p>
-        ) : (
-          <>
+          <div className="schermo-center"><p style={{ fontSize: "clamp(16px, 3vmin, 28px)", color: "#9FB3AC" }}>Caricamento...</p></div>
+        ) : statoSchermo && !statoSchermo.aperta ? (
+          <div className="schermo-center">
             <div style={{ fontSize: "clamp(16px, 3vmin, 30px)", fontWeight: 800, fontFamily: "'Archivo', sans-serif", letterSpacing: "0.02em" }}>
               {schermoData.nome}
             </div>
-            {statoSchermo && !statoSchermo.aperta ? (
-              <p style={{ fontSize: "clamp(16px, 3vmin, 28px)", color: "#9FB3AC", marginTop: "5vmin" }}>
-                Al momento siamo chiusi. {statoSchermo.prossimaAperturaLabel}.
-              </p>
-            ) : (
-              <>
-                <div style={{ fontSize: "clamp(14px, 2.6vmin, 26px)", color: "#9FB3AC", marginTop: "5vmin", letterSpacing: "0.08em", textTransform: "uppercase" }}>
-                  Ora stiamo servendo
-                </div>
-                <div style={{
-                  fontFamily: "'IBM Plex Mono', monospace",
-                  fontWeight: 700,
-                  fontSize: "clamp(90px, 28vmin, 440px)",
-                  lineHeight: 1,
-                  color: "#C99A3E",
-                  marginTop: "1.5vmin",
-                }}>
-                  {schermoData.current_oggi}
-                </div>
-                <div style={{ display: "flex", gap: "8vmin", marginTop: "5vmin", flexWrap: "wrap", justifyContent: "center" }}>
-                  <div>
-                    <div style={{ fontSize: "clamp(28px, 8vmin, 76px)", fontWeight: 800, fontFamily: "'Archivo', sans-serif" }}>{schermoData.in_coda}</div>
-                    <div style={{ fontSize: "clamp(11px, 1.8vmin, 18px)", color: "#9FB3AC", marginTop: "1.5vmin", letterSpacing: "0.05em", textTransform: "uppercase" }}>In attesa</div>
+            <p style={{ fontSize: "clamp(16px, 3vmin, 28px)", color: "#9FB3AC", marginTop: "5vmin" }}>
+              Al momento siamo chiusi. {statoSchermo.prossimaAperturaLabel}.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="schermo-header">{schermoData.nome}</div>
+            <div className="schermo-split">
+              <div className="schermo-col schermo-col-serve">
+                <div className="schermo-label">Ora stiamo servendo</div>
+                <div className="schermo-numero-servito">{schermoData.current_oggi}</div>
+              </div>
+              <div className="schermo-col">
+                <div className="schermo-label">In coda{schermoData.in_coda > 0 ? ` (${schermoData.in_coda})` : ""}</div>
+                {numeriInCoda.length === 0 ? (
+                  <p style={{ fontSize: "clamp(16px, 2.4vmin, 26px)", color: "#9FB3AC" }}>Nessuno in coda</p>
+                ) : (
+                  <div className="schermo-coda-grid">
+                    {numeriInCoda.map((num) => (
+                      <div key={num} className="schermo-coda-chip" style={{ fontSize: `clamp(14px, ${chipVmin}vmin, 64px)` }}>
+                        {num}
+                      </div>
+                    ))}
                   </div>
-                  <div>
-                    <div style={{ fontSize: "clamp(28px, 8vmin, 76px)", fontWeight: 800, fontFamily: "'Archivo', sans-serif" }}>~{schermoData.attesa_media_min}m</div>
-                    <div style={{ fontSize: "clamp(11px, 1.8vmin, 18px)", color: "#9FB3AC", marginTop: "1.5vmin", letterSpacing: "0.05em", textTransform: "uppercase" }}>Attesa media</div>
-                  </div>
-                </div>
-              </>
-            )}
+                )}
+                {altriInCoda > 0 && <div className="schermo-coda-altri">+{altriInCoda} altri</div>}
+                <div className="schermo-attesa-media">Attesa media ~{schermoData.attesa_media_min} min</div>
+              </div>
+            </div>
           </>
         )}
       </div>
