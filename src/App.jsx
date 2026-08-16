@@ -614,17 +614,37 @@ const handleLogout = async () => {
     return pathParts[0] === "schermo" ? pathParts[1] : null;
   });
   const [schermoData, setSchermoData] = useState(null);
+  // Errore "definitivo": l'attivita' non esiste o ha disattivato lo
+  // schermo. Riprovare non serve, si mostra subito a tutto schermo.
   const [schermoErrore, setSchermoErrore] = useState("");
+  // Un fallimento della chiamata (es. rete del negozio che scatta un
+  // attimo) NON deve far sparire i numeri gia' mostrati: si continua a
+  // riprovare in silenzio, e solo se il problema persiste da un po' si
+  // avvisa con un banner -- senza nascondere gli ultimi dati validi.
+  const [schermoConnessionePersa, setSchermoConnessionePersa] = useState(false);
+  const schermoUltimoOkRef = useRef(null);
+  const SOGLIA_CONNESSIONE_PERSA_MS = 90000;
 
   useEffect(() => {
     if (view !== "schermo" || !schermoSlug) return;
+    schermoUltimoOkRef.current = Date.now();
     const aggiorna = () => {
       schermoPubblico(schermoSlug)
         .then((d) => {
           setSchermoData(d);
           setSchermoErrore("");
+          setSchermoConnessionePersa(false);
+          schermoUltimoOkRef.current = Date.now();
         })
-        .catch((e) => setSchermoErrore(e.message));
+        .catch((e) => {
+          if (e.message === "Attivita' non trovata" || e.message === "Schermo non abilitato per questa attivita'") {
+            setSchermoErrore(e.message);
+            return;
+          }
+          if (Date.now() - schermoUltimoOkRef.current > SOGLIA_CONNESSIONE_PERSA_MS) {
+            setSchermoConnessionePersa(true);
+          }
+        });
     };
     aggiorna();
     const t = setInterval(aggiorna, 10000);
@@ -1000,14 +1020,40 @@ const handleLogout = async () => {
           }
           .schermo-coda-altri { font-size: clamp(11px, 1.6vmin, 16px); color: #9FB3AC; margin-top: 2vmin; }
           .schermo-attesa-media { font-size: clamp(11px, 1.6vmin, 16px); color: #9FB3AC; margin-top: 2.5vmin; }
+          .schermo-banner-offline {
+            position: fixed;
+            bottom: 2vmin;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(183,71,42,0.9);
+            color: #F1ECDA;
+            font-size: clamp(11px, 1.6vmin, 15px);
+            font-weight: 600;
+            padding: 1vmin 2.5vmin;
+            border-radius: 999px;
+            white-space: nowrap;
+          }
           @media (orientation: portrait) {
             .schermo-split { flex-direction: column; }
             .schermo-col-serve { border-right: none; border-bottom: 1px solid rgba(241,236,218,0.15); }
             .schermo-numero-servito { font-size: clamp(60px, 15vmin, 220px); }
           }
         `}</style>
+        {schermoData && schermoConnessionePersa && (
+          <div className="schermo-banner-offline">
+            <AlertTriangle size={13} style={{ display: "inline", marginRight: 6, position: "relative", top: -1 }} />
+            Connessione assente — numeri non aggiornati
+          </div>
+        )}
         {schermoErrore ? (
           <div className="schermo-center"><p style={{ fontSize: "clamp(16px, 3vmin, 28px)", color: "#9FB3AC" }}>{schermoErrore}</p></div>
+        ) : !schermoData && schermoConnessionePersa ? (
+          <div className="schermo-center">
+            <AlertTriangle size={40} color="#9FB3AC" />
+            <p style={{ fontSize: "clamp(16px, 3vmin, 28px)", color: "#9FB3AC", marginTop: "3vmin" }}>
+              Connessione assente. Verifica la rete del negozio.
+            </p>
+          </div>
         ) : !schermoData ? (
           <div className="schermo-center"><p style={{ fontSize: "clamp(16px, 3vmin, 28px)", color: "#9FB3AC" }}>Caricamento...</p></div>
         ) : statoSchermo && !statoSchermo.aperta ? (
