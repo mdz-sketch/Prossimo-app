@@ -342,6 +342,13 @@ export async function cercaAttivita(query) {
   return data;
 }
 
+// --- Admin: lista di tutti gli utenti registrati --------------------------
+export async function listaUtentiAdmin(query = "") {
+  const { data, error } = await supabase.rpc("admin_lista_utenti", { cerca: query });
+  if (error) throw error;
+  return data;
+}
+
 // --- Realtime: iscriviti agli aggiornamenti di un'attività ----------------
 export function ascoltaAggiornamenti(businessId, callback) {
   const channel = supabase

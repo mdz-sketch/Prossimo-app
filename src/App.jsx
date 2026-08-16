@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, BarChart3, MapPin, Tag, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Printer, AlertTriangle, Download } from "lucide-react";
+import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, BarChart3, MapPin, Tag, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Printer, AlertTriangle, Download, Users, Mail, ShieldCheck } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "./lib/supabaseClient";
 import Login from "./components/Login";
@@ -22,6 +22,7 @@ import {
   staffDiAttivita,
   rimuoviStaff,
   statistichePerOperatore,
+  listaUtentiAdmin,
 } from "./lib/queries";
 import { esportaCsv, esportaPdf, apriQrPdf, condividiQrPdf } from "./lib/export";
 import { sottoscriviPush } from "./lib/push";
@@ -134,6 +135,9 @@ const percentualeNonPresenti = (serviti, nonPresentati) => {
 };
 
 const formatOra = (h) => `${String(h).padStart(2, "0")}:00`;
+
+const formatData = (iso) =>
+  new Date(iso).toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" });
 
 // Giorni della settimana in ordine "italiano" (lunedi' prima), ciascuno
 // abbinato al numero restituito da Date.getDay() (0 = domenica).
@@ -407,6 +411,8 @@ const handleLogout = async () => {
   const [attivitaInModifica, setAttivitaInModifica] = useState(null);
   const [businesses, setBusinesses] = useState([]);
   const [adminSearch, setAdminSearch] = useState("");
+  const [utenti, setUtenti] = useState([]);
+  const [utentiSearch, setUtentiSearch] = useState("");
   const [formName, setFormName] = useState("");
   const [formAddress, setFormAddress] = useState("");
   const [formType, setFormType] = useState("Pizzeria");
@@ -809,6 +815,11 @@ const handleLogout = async () => {
     if (view !== "admin") return;
     cercaAttivita(adminSearch).then(setBusinesses).catch((e) => setErrore(e.message));
   }, [view, adminSearch]);
+
+  useEffect(() => {
+    if (view !== "utenti") return;
+    listaUtentiAdmin(utentiSearch).then(setUtenti).catch((e) => setErrore(e.message));
+  }, [view, utentiSearch]);
 
   return (
     <div className="board">
@@ -1280,6 +1291,9 @@ const handleLogout = async () => {
           {isAdmin && (
             <button className={"tab-btn" + (view === "admin" ? " active" : "")} onClick={() => setView("admin")}>Admin</button>
           )}
+          {isAdmin && (
+            <button className={"tab-btn" + (view === "utenti" ? " active" : "")} onClick={() => setView("utenti")}>Utenti</button>
+          )}
           <button className="tab-btn" onClick={handleLogout}>Esci</button>
         </div>
         )}
@@ -1654,6 +1668,59 @@ const handleLogout = async () => {
               {businesses.length === 0 && (
                 <p style={{ fontSize: 13, color: "#9FB3AC", textAlign: "center", marginTop: 20 }}>
                   Nessuna attivita' corrisponde alla ricerca.
+                </p>
+              )}
+            </div>
+          </div>
+          )
+        ) : view === "utenti" ? (
+          !isAdmin ? (
+            <Login onLoginSuccess={handleLoginSuccess} />
+          ) : (
+          <div className="board-panel">
+            <div className="search-box">
+              <Search size={15} />
+              <input
+                className="search-input"
+                placeholder="Cerca per email..."
+                value={utentiSearch}
+                onChange={(e) => setUtentiSearch(e.target.value)}
+              />
+            </div>
+
+            <div className="board-label" style={{ marginTop: 16 }}>
+              <Users size={13} style={{ display: "inline", marginRight: 6, position: "relative", top: -1 }} />
+              {utenti.length} utenti registrati
+            </div>
+
+            <div className="admin-list">
+              {utenti.map((u) => (
+                <div className="admin-card" key={u.id}>
+                  <div className="admin-card-top">
+                    <div style={{ minWidth: 0 }}>
+                      <div className="admin-card-name" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        <Mail size={12} style={{ display: "inline", marginRight: 5, position: "relative", top: -1 }} />
+                        {u.email}
+                      </div>
+                      <div className="admin-card-type"><Building2 size={11} /> {u.attivita_possedute} attivita' possedute</div>
+                    </div>
+                    {u.ruolo === "admin" && (
+                      <span className="queue-chip"><ShieldCheck size={11} style={{ display: "inline", marginRight: 4, position: "relative", top: -1 }} />Admin</span>
+                    )}
+                  </div>
+                  <div className="admin-card-row"><Clock size={12} /> Registrato il {formatData(u.creato_il)}</div>
+                  <div className="admin-card-row">
+                    <Clock size={12} /> Ultimo accesso: {u.ultimo_accesso ? formatData(u.ultimo_accesso) : "mai"}
+                  </div>
+                  <div className="admin-card-row">
+                    {u.email_confermata ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />}
+                    Email {u.email_confermata ? "confermata" : "non confermata"}
+                  </div>
+                </div>
+              ))}
+              {utenti.length === 0 && (
+                <p style={{ fontSize: 13, color: "#9FB3AC", textAlign: "center", marginTop: 20 }}>
+                  Nessun utente corrisponde alla ricerca.
                 </p>
               )}
             </div>
