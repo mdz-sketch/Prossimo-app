@@ -23,6 +23,8 @@ import {
   rimuoviStaff,
   statistichePerOperatore,
   listaUtentiAdmin,
+  modificaEmailUtenteAdmin,
+  eliminaUtenteAdmin,
 } from "./lib/queries";
 import { esportaCsv, esportaPdf, apriQrPdf, condividiQrPdf } from "./lib/export";
 import { sottoscriviPush } from "./lib/push";
@@ -273,6 +275,26 @@ const handleElimina = async (business) => {
       setMieAttivitaList((prev) => prev.filter((b) => b.id !== business.id));
       setBusinesses((prev) => prev.filter((b) => b.id !== business.id));
       if (activeBusiness?.id === business.id) setActiveBusiness(null);
+    } catch (err) {
+      alert("Errore nell'eliminazione: " + err.message);
+    }
+  };
+const handleModificaEmailUtente = async (utente) => {
+    const nuovaEmail = window.prompt(`Nuova email per ${utente.email}:`, utente.email);
+    if (!nuovaEmail || nuovaEmail.trim() === "" || nuovaEmail.trim() === utente.email) return;
+    try {
+      await modificaEmailUtenteAdmin(utente.id, nuovaEmail.trim());
+      setUtenti((prev) => prev.map((u) => (u.id === utente.id ? { ...u, email: nuovaEmail.trim() } : u)));
+    } catch (err) {
+      alert("Errore nella modifica: " + err.message);
+    }
+  };
+const handleEliminaUtente = async (utente) => {
+    const conferma = window.confirm(`Sei sicuro di voler eliminare l'utente "${utente.email}"? Questa azione non può essere annullata.`);
+    if (!conferma) return;
+    try {
+      await eliminaUtenteAdmin(utente.id);
+      setUtenti((prev) => prev.filter((u) => u.id !== utente.id));
     } catch (err) {
       alert("Errore nell'eliminazione: " + err.message);
     }
@@ -1716,6 +1738,18 @@ const handleLogout = async () => {
                     {u.email_confermata ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />}
                     Email {u.email_confermata ? "confermata" : "non confermata"}
                   </div>
+                  {u.id === currentUser?.id ? (
+                    <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: 10 }}>Il tuo account</p>
+                  ) : (
+                    <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                      <button className="cta dark" style={{ flex: 1, minWidth: 0 }} onClick={() => handleModificaEmailUtente(u)}>
+                        Modifica email
+                      </button>
+                      <button className="cta" style={{ flex: 1, minWidth: 0, background: "#C0392B", color: "#F1ECDA", border: "none" }} onClick={() => handleEliminaUtente(u)}>
+                        Elimina
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
               {utenti.length === 0 && (
