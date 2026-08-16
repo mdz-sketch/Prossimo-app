@@ -154,6 +154,13 @@ const GIORNI_SETTIMANA = [
 ];
 const TUTTI_I_GIORNI = GIORNI_SETTIMANA.map((g) => g.jsDay);
 
+const formatGiorniApertura = (giorni) => {
+  const set = giorni ?? TUTTI_I_GIORNI;
+  if (set.length >= 7) return "Tutti i giorni";
+  if (set.length === 0) return "Nessun giorno impostato";
+  return GIORNI_SETTIMANA.filter((g) => set.includes(g.jsDay)).map((g) => g.label).join(", ");
+};
+
 // Se l'attivita' e' aperta ora (in base a ora_apertura/ora_chiusura e ai
 // giorni configurati) e, se e' chiusa, quando riapre: puo' essere piu'
 // tardi oggi stesso, domani, o un giorno successivo se l'attivita' resta
@@ -431,10 +438,15 @@ const handleLogout = async () => {
   // Attivita' in fase di modifica (form "Crea Attivita'" riusato per
   // editare): null quando si sta creando una nuova attivita'.
   const [attivitaInModifica, setAttivitaInModifica] = useState(null);
+  // Vista da cui si e' aperta la modifica (Le mie attivita'/Admin/Utenti):
+  // ci si torna al salvataggio o all'annullamento, invece di atterrare
+  // sempre su "operatore" anche quando si arrivava da un'altra schermata.
+  const [vistaProvenienzaModifica, setVistaProvenienzaModifica] = useState("operatore");
   const [businesses, setBusinesses] = useState([]);
   const [adminSearch, setAdminSearch] = useState("");
   const [utenti, setUtenti] = useState([]);
   const [utentiSearch, setUtentiSearch] = useState("");
+  const [attivitaPerProprietario, setAttivitaPerProprietario] = useState({});
   const [formName, setFormName] = useState("");
   const [formAddress, setFormAddress] = useState("");
   const [formType, setFormType] = useState("Pizzeria");
@@ -733,7 +745,7 @@ const handleLogout = async () => {
   // Precompila il form con i dati di un'attivita' esistente e passa in
   // modalita' modifica: il proprietario puo' cosi' correggere nome, orari,
   // giorni di apertura ecc. senza dover eliminare e ricreare l'attivita'.
-  const avviaModifica = (b) => {
+  const avviaModifica = (b, provenienza = "operatore") => {
     setFormName(b.name);
     setFormAddress(b.address || "");
     setFormType(b.type);
@@ -743,6 +755,7 @@ const handleLogout = async () => {
     setFormSogliaCoda(b.soglia_coda != null ? String(b.soglia_coda) : "");
     setFormSogliaAttesa(b.soglia_attesa != null ? String(b.soglia_attesa) : "");
     setAttivitaInModifica(b);
+    setVistaProvenienzaModifica(provenienza);
     setRegistered(false);
     setErrore("");
     setView("registrazione");
@@ -751,7 +764,7 @@ const handleLogout = async () => {
   const annullaModifica = () => {
     setAttivitaInModifica(null);
     nuovaRegistrazione();
-    setView("operatore");
+    setView(vistaProvenienzaModifica);
   };
 
   const salvaAttivita = async () => {
@@ -793,7 +806,7 @@ const handleLogout = async () => {
       setAttivitaInModifica(null);
       if (activeBusiness?.id === data.id) setActiveBusiness(data);
       ricaricaMieAttivita();
-      setView("operatore");
+      setView(vistaProvenienzaModifica);
       return;
     }
 
@@ -830,6 +843,7 @@ const handleLogout = async () => {
     setFormGiorniApertura(TUTTI_I_GIORNI);
     setFormSogliaCoda("");
     setFormSogliaAttesa("");
+    setVistaProvenienzaModifica("operatore");
   };
 
   // --- Admin --------------------------------------------------------------
@@ -842,6 +856,23 @@ const handleLogout = async () => {
     if (view !== "utenti") return;
     listaUtentiAdmin(utentiSearch).then(setUtenti).catch((e) => setErrore(e.message));
   }, [view, utentiSearch]);
+
+  // Attivita' di ciascun utente (per mostrare orari/giorni di apertura
+  // nella scheda utente): tutte le attivita', l'admin le legge tutte via
+  // RLS, raggruppate per proprietario.
+  useEffect(() => {
+    if (view !== "utenti") return;
+    cercaAttivita("")
+      .then((tutte) => {
+        const raggruppate = {};
+        tutte.forEach((b) => {
+          if (!raggruppate[b.owner_id]) raggruppate[b.owner_id] = [];
+          raggruppate[b.owner_id].push(b);
+        });
+        setAttivitaPerProprietario(raggruppate);
+      })
+      .catch((e) => setErrore(e.message));
+  }, [view]);
 
   return (
     <div className="board">
@@ -1484,7 +1515,7 @@ const handleLogout = async () => {
                           Gestisci
                         </button>
                         {b.ruolo === "proprietario" && (
-                          <button className="cta dark" style={{ flex: 1, minWidth: 0 }} onClick={() => avviaModifica(b)}>
+                          <button className="cta dark" style={{ flex: 1, minWidth: 0 }} onClick={() => avviaModifica(b, "operatore")}>
                             Modifica
                           </button>
                         )}
@@ -1678,7 +1709,7 @@ const handleLogout = async () => {
                     </button>
                   </div>
                   <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                    <button className="cta dark" style={{ flex: 1, minWidth: 0 }} onClick={() => avviaModifica(b)}>
+                    <button className="cta dark" style={{ flex: 1, minWidth: 0 }} onClick={() => avviaModifica(b, "admin")}>
                       Modifica
                     </button>
                     <button className="cta" style={{ flex: 1, minWidth: 0, background: "#C0392B", color: "#F1ECDA", border: "none" }} onClick={() => handleElimina(b)}>
@@ -1738,6 +1769,21 @@ const handleLogout = async () => {
                     {u.email_confermata ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />}
                     Email {u.email_confermata ? "confermata" : "non confermata"}
                   </div>
+                  {(attivitaPerProprietario[u.id] || []).map((b) => (
+                    <div key={b.id} style={{ marginTop: 10, padding: 10, background: "#0F211D", borderRadius: 10 }}>
+                      <div style={{ fontSize: 12.5, fontWeight: 700 }}>{b.name}</div>
+                      <div style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: 4, display: "flex", alignItems: "center", gap: 5 }}>
+                        <Clock size={11} /> {formatOra(b.ora_apertura ?? 9)}–{formatOra(b.ora_chiusura ?? 20)} · {formatGiorniApertura(b.giorni_apertura)}
+                      </div>
+                      <button
+                        className="cta ghost"
+                        style={{ margin: 0, marginTop: 8, width: "auto", padding: "7px 10px", fontSize: 11.5 }}
+                        onClick={() => avviaModifica(b, "utenti")}
+                      >
+                        Modifica orari
+                      </button>
+                    </div>
+                  ))}
                   {u.id === currentUser?.id ? (
                     <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: 10 }}>Il tuo account</p>
                   ) : (
