@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, BarChart3, MapPin, Tag, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Printer, AlertTriangle, Download, Users, Mail, ShieldCheck } from "lucide-react";
+import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, BarChart3, MapPin, Tag, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Printer, AlertTriangle, Download, Users, Mail, ShieldCheck, Monitor } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "./lib/supabaseClient";
 import Login from "./components/Login";
@@ -25,6 +25,7 @@ import {
   listaUtentiAdmin,
   modificaEmailUtenteAdmin,
   eliminaUtenteAdmin,
+  schermoPubblico,
 } from "./lib/queries";
 import { esportaCsv, esportaPdf, apriQrPdf, condividiQrPdf } from "./lib/export";
 import { sottoscriviPush } from "./lib/push";
@@ -195,7 +196,11 @@ const statoApertura = (business, adesso) => {
 };
 
 export default function App() {
-  const [view, setView] = useState("operatore");
+  const [view, setView] = useState(() => {
+    const pathParts = window.location.pathname.split("/").filter(Boolean);
+    if (pathParts[0] === "schermo" && pathParts[1]) return "schermo";
+    return "operatore";
+  });
 const [currentUser, setCurrentUser] = useState(null);
   const isLoggedIn = currentUser !== null;
   // app_metadata (a differenza di user_metadata) non e' modificabile
@@ -456,6 +461,7 @@ const handleLogout = async () => {
   // Soglie opzionali per l'avviso di coda lunga: stringa vuota = disattivata.
   const [formSogliaCoda, setFormSogliaCoda] = useState("");
   const [formSogliaAttesa, setFormSogliaAttesa] = useState("");
+  const [formSchermoAbilitato, setFormSchermoAbilitato] = useState(true);
   const [errore, setErrore] = useState("");
 
   const toggleGiornoApertura = (jsDay) => {
@@ -597,6 +603,33 @@ const handleLogout = async () => {
       setView("operatore");
     }
   }, []);
+
+  // Schermo pubblico (/schermo/<slug>): nessun login, pensato per uno
+  // schermo fisso in negozio. Si aggiorna da solo a intervalli, non serve
+  // interazione dell'utente. Lo slug si ricava una volta sola dall'URL
+  // (stesso motivo per cui "view" sopra parte gia' da "schermo" quando
+  // serve: evitare un setState sincrono dentro un effect al primo giro).
+  const [schermoSlug] = useState(() => {
+    const pathParts = window.location.pathname.split("/").filter(Boolean);
+    return pathParts[0] === "schermo" ? pathParts[1] : null;
+  });
+  const [schermoData, setSchermoData] = useState(null);
+  const [schermoErrore, setSchermoErrore] = useState("");
+
+  useEffect(() => {
+    if (view !== "schermo" || !schermoSlug) return;
+    const aggiorna = () => {
+      schermoPubblico(schermoSlug)
+        .then((d) => {
+          setSchermoData(d);
+          setSchermoErrore("");
+        })
+        .catch((e) => setSchermoErrore(e.message));
+    };
+    aggiorna();
+    const t = setInterval(aggiorna, 10000);
+    return () => clearInterval(t);
+  }, [view, schermoSlug]);
 
   // Al primo avvio, se c'era un'attivita' scelta in precedenza, la ricarica
   useEffect(() => {
@@ -754,6 +787,7 @@ const handleLogout = async () => {
     setFormGiorniApertura(b.giorni_apertura ?? TUTTI_I_GIORNI);
     setFormSogliaCoda(b.soglia_coda != null ? String(b.soglia_coda) : "");
     setFormSogliaAttesa(b.soglia_attesa != null ? String(b.soglia_attesa) : "");
+    setFormSchermoAbilitato(b.schermo_abilitato ?? true);
     setAttivitaInModifica(b);
     setVistaProvenienzaModifica(provenienza);
     setRegistered(false);
@@ -788,6 +822,7 @@ const handleLogout = async () => {
       giorni_apertura: formGiorniApertura,
       soglia_coda: formSogliaCoda === "" ? null : Number(formSogliaCoda),
       soglia_attesa: formSogliaAttesa === "" ? null : Number(formSogliaAttesa),
+      schermo_abilitato: formSchermoAbilitato,
     };
 
     if (attivitaInModifica) {
@@ -843,6 +878,7 @@ const handleLogout = async () => {
     setFormGiorniApertura(TUTTI_I_GIORNI);
     setFormSogliaCoda("");
     setFormSogliaAttesa("");
+    setFormSchermoAbilitato(true);
     setVistaProvenienzaModifica("operatore");
   };
 
@@ -873,6 +909,70 @@ const handleLogout = async () => {
       })
       .catch((e) => setErrore(e.message));
   }, [view]);
+
+  if (view === "schermo") {
+    const statoSchermo = schermoData
+      ? statoApertura({ ora_apertura: schermoData.ora_apertura, ora_chiusura: schermoData.ora_chiusura, giorni_apertura: schermoData.giorni_apertura }, new Date())
+      : null;
+    return (
+      <div style={{
+        minHeight: "100vh",
+        background: "#0B1A16",
+        color: "#F1ECDA",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        fontFamily: "'IBM Plex Sans', sans-serif",
+        padding: 24,
+        textAlign: "center",
+      }}>
+        <style>{`@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=IBM+Plex+Mono:wght@500;600;700&display=swap');`}</style>
+        {schermoErrore ? (
+          <p style={{ fontSize: 20, color: "#9FB3AC" }}>{schermoErrore}</p>
+        ) : !schermoData ? (
+          <p style={{ fontSize: 20, color: "#9FB3AC" }}>Caricamento...</p>
+        ) : (
+          <>
+            <div style={{ fontSize: 22, fontWeight: 800, fontFamily: "'Archivo', sans-serif", letterSpacing: "0.02em" }}>
+              {schermoData.nome}
+            </div>
+            {statoSchermo && !statoSchermo.aperta ? (
+              <p style={{ fontSize: 24, color: "#9FB3AC", marginTop: 40 }}>
+                Al momento siamo chiusi. {statoSchermo.prossimaAperturaLabel}.
+              </p>
+            ) : (
+              <>
+                <div style={{ fontSize: 26, color: "#9FB3AC", marginTop: 50, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                  Ora stiamo servendo
+                </div>
+                <div style={{
+                  fontFamily: "'IBM Plex Mono', monospace",
+                  fontWeight: 700,
+                  fontSize: "min(38vw, 320px)",
+                  lineHeight: 1,
+                  color: "#C99A3E",
+                  marginTop: 10,
+                }}>
+                  {schermoData.current_oggi}
+                </div>
+                <div style={{ display: "flex", gap: 40, marginTop: 60, flexWrap: "wrap", justifyContent: "center" }}>
+                  <div>
+                    <div style={{ fontSize: "min(10vw, 64px)", fontWeight: 800, fontFamily: "'Archivo', sans-serif" }}>{schermoData.in_coda}</div>
+                    <div style={{ fontSize: 18, color: "#9FB3AC", marginTop: 6, letterSpacing: "0.05em", textTransform: "uppercase" }}>In attesa</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "min(10vw, 64px)", fontWeight: 800, fontFamily: "'Archivo', sans-serif" }}>~{schermoData.attesa_media_min}m</div>
+                    <div style={{ fontSize: 18, color: "#9FB3AC", marginTop: 6, letterSpacing: "0.05em", textTransform: "uppercase" }}>Attesa media</div>
+                  </div>
+                </div>
+              </>
+            )}
+          </>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="board">
@@ -2027,7 +2127,36 @@ const handleLogout = async () => {
                   </div>
                 </div>
 
-                <button className="cta primary" onClick={salvaAttivita} disabled={!formName.trim()}>
+                <label className="field-label"><Monitor size={13} style={{ display: "inline", marginRight: 5, position: "relative", top: -1 }} />Schermo per i clienti</label>
+                <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: -4, marginBottom: 8 }}>
+                  Una pagina pubblica da aprire su uno schermo in negozio: mostra chi si sta servendo, quante persone sono in coda e l'attesa media.
+                </p>
+                <div className="chip-row">
+                  <button type="button" className={"chip" + (formSchermoAbilitato ? " active" : "")} onClick={() => setFormSchermoAbilitato(true)}>Attivo</button>
+                  <button type="button" className={"chip" + (!formSchermoAbilitato ? " active" : "")} onClick={() => setFormSchermoAbilitato(false)}>Disattivato</button>
+                </div>
+                {attivitaInModifica && formSchermoAbilitato && (
+                  <>
+                    <div className="url-chip" style={{ marginTop: 10 }}>
+                      <Link2 size={13} />
+                      tuapp.it/schermo/{attivitaInModifica.slug}
+                    </div>
+                    <button
+                      type="button"
+                      className="cta ghost"
+                      style={{ fontSize: 12.5, padding: "6px 10px", marginTop: 8 }}
+                      onClick={() => {
+                        const url = `${window.location.origin}/schermo/${attivitaInModifica.slug}`;
+                        navigator.clipboard.writeText(url);
+                        alert("Link schermo copiato negli appunti!");
+                      }}
+                    >
+                      Copia link schermo
+                    </button>
+                  </>
+                )}
+
+                <button className="cta primary" onClick={salvaAttivita} disabled={!formName.trim()} style={{ marginTop: 18 }}>
                   {attivitaInModifica ? (
                     <><Check size={16} /> Salva modifiche</>
                   ) : (

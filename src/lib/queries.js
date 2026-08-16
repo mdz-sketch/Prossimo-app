@@ -362,6 +362,13 @@ export async function eliminaUtenteAdmin(userId) {
   if (error) throw error;
 }
 
+// --- Schermo pubblico per i clienti (nessun login) -------------------------
+export async function schermoPubblico(slug) {
+  const { data, error } = await supabase.rpc("schermo_pubblico", { slug_input: slug });
+  if (error) throw error;
+  return data?.[0] ?? null;
+}
+
 // --- Realtime: iscriviti agli aggiornamenti di un'attività ----------------
 export function ascoltaAggiornamenti(businessId, callback) {
   const channel = supabase
