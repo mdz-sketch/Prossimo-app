@@ -167,6 +167,12 @@ const percentualeNonPresenti = (serviti, nonPresentati) => {
 
 const formatOra = (h) => `${String(h).padStart(2, "0")}:00`;
 
+// Chiave localStorage per il numero preso da un cliente su una data
+// attivita' su QUESTO dispositivo -- permette di ritrovarlo dopo un
+// reload o una scheda del browser scaricata in background, invece di
+// perderlo (e doverne prendere un altro, perdendo il proprio posto).
+const chiaveTicket = (businessId) => `prossimo_ticket_${businessId}`;
+
 const formatData = (iso) =>
   new Date(iso).toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" });
 
@@ -433,6 +439,17 @@ const handleLogout = async () => {
   };
 
   const [myTicket, setMyTicket] = useState(null);
+  // Salva il numero preso su questo dispositivo appena viene impostato,
+  // cosi' un reload lo ritrova (vedi chiaveTicket sopra) invece di doverne
+  // prendere un altro. La rimozione e' esplicita in annulla(), non qui:
+  // un myTicket che torna a null non deve per forza cancellare il numero
+  // salvato (es. cambio di attivita' lato operatore, dove myTicket non
+  // c'entra nulla con il cliente).
+  useEffect(() => {
+    if (activeBusiness?.id && myTicket !== null) {
+      localStorage.setItem(chiaveTicket(activeBusiness.id), String(myTicket));
+    }
+  }, [myTicket, activeBusiness?.id]);
   const [pulse, setPulse] = useState(false);
   const [servedToday, setServedToday] = useState(0);
   const [skippedToday, setSkippedToday] = useState(0);
@@ -703,6 +720,17 @@ const handleLogout = async () => {
           localStorage.setItem("prossimo_active_business_id", data.id);
           setView("cliente");
 
+          // Questo dispositivo ha gia' un numero preso per questa stessa
+          // attivita' (es. la pagina si e' ricaricata, o il browser aveva
+          // scaricato la scheda in background): si recupera quello invece
+          // di prenderne un altro, altrimenti ogni reload avrebbe
+          // silenziosamente bruciato un numero e fatto perdere il posto.
+          const ticketSalvato = localStorage.getItem(chiaveTicket(data.id));
+          if (ticketSalvato) {
+            setMyTicket(parseInt(ticketSalvato, 10));
+            return;
+          }
+
           // Attivita' chiusa in questo momento: non ha senso far prendere
           // un numero, si mostra invece il messaggio con l'orario di riapertura.
           if (!statoApertura(data, new Date()).aperta) return;
@@ -729,7 +757,10 @@ const handleLogout = async () => {
         .eq("id", savedId)
         .single()
         .then(({ data }) => {
-          if (data) setActiveBusiness(data);
+          if (!data) return;
+          setActiveBusiness(data);
+          const ticketSalvato = localStorage.getItem(chiaveTicket(data.id));
+          if (ticketSalvato) setMyTicket(parseInt(ticketSalvato, 10));
         });
     }
   }, []);
@@ -796,7 +827,10 @@ const handleLogout = async () => {
     }
   };
 
-  const annulla = () => setMyTicket(null);
+  const annulla = () => {
+    if (activeBusiness?.id) localStorage.removeItem(chiaveTicket(activeBusiness.id));
+    setMyTicket(null);
+  };
 
   // --- Operatore --------------------------------------------------------
   const avanti = async () => {
