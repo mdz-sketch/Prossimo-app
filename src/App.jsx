@@ -67,31 +67,59 @@ function FlapNumber({ value, size = "lg" }) {
   );
 }
 
+// Passo "pulito" (1/2/5/10/15/20/25/50/100...) per le etichette dell'asse
+// delle ordinate, scelto in base al massimo reale dei dati: cosi' le
+// etichette sono sempre numeri tondi (0, 5, 10, 15...) invece di valori
+// qualsiasi. Un passo extra sopra il dato piu' alto fa da margine, cosi'
+// la barra piu' alta non tocca il bordo del grafico.
+const PASSI_ASSE_CANDIDATI = [1, 2, 5, 10, 15, 20, 25, 50, 100, 200, 500, 1000];
+const calcolaAsseY = (massimo) => {
+  if (massimo === 0) return { maxTick: 5, tacche: [5, 0] };
+  const passo = PASSI_ASSE_CANDIDATI.find((p) => massimo / p <= 3) || 1000;
+  const maxTick = (Math.floor(massimo / passo) + 1) * passo;
+  const tacche = [];
+  for (let val = maxTick; val >= 0; val -= passo) tacche.push(val);
+  return { maxTick, tacche };
+};
+
 function MiniBarChart({ labels, series, chiusi }) {
-  // Limite condiviso da tutte le serie del grafico (stessa unita' di misura),
-  // cosi' le altezze delle barre restano davvero confrontabili tra loro.
-  const limite = Math.max(...series.flatMap((s) => s.data), 0) + 5;
+  const massimoReale = Math.max(...series.flatMap((s) => s.data), 0);
+  const { maxTick, tacche } = calcolaAsseY(massimoReale);
   return (
     <div>
       <div className="bar-chart">
-        {labels.map((label, i) => (
-          <div className="bar-col" key={i} style={chiusi?.[i] ? { opacity: 0.35 } : undefined}>
-            <div className="bar-group">
-              {series.map((s) => (
-                <div
-                  key={s.name}
-                  className="bar"
-                  style={{
-                    height: s.data[i] > 0 ? `${Math.max((s.data[i] / limite) * 100, 4)}%` : "0%",
-                    background: s.color,
-                  }}
-                  title={chiusi?.[i] ? `${label}: chiuso` : `${s.name}: ${s.data[i]}`}
-                />
-              ))}
-            </div>
-            <span className="bar-lbl">{label}{chiusi?.[i] ? " ✕" : ""}</span>
+        <div className="bar-chart-y-axis">
+          {tacche.map((val) => (
+            <span key={val}>{val}</span>
+          ))}
+        </div>
+        <div className="bar-chart-plot">
+          <div className="bar-chart-gridlines">
+            {tacche.map((val) => (
+              <div className="bar-chart-gridline" key={val} />
+            ))}
           </div>
-        ))}
+          <div className="bar-chart-bars">
+            {labels.map((label, i) => (
+              <div className="bar-col" key={i} style={chiusi?.[i] ? { opacity: 0.35 } : undefined}>
+                <div className="bar-group">
+                  {series.map((s) => (
+                    <div
+                      key={s.name}
+                      className="bar"
+                      style={{
+                        height: s.data[i] > 0 ? `${Math.max((s.data[i] / maxTick) * 100, 4)}%` : "0%",
+                        background: s.color,
+                      }}
+                      title={chiusi?.[i] ? `${label}: chiuso` : `${s.name}: ${s.data[i]}`}
+                    />
+                  ))}
+                </div>
+                <span className="bar-lbl">{label}{chiusi?.[i] ? " ✕" : ""}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
       <div className="bar-chart-legend">
         {series.map((s) => (
@@ -1402,6 +1430,42 @@ const handleLogout = async () => {
         .bar-chart {
           margin-top: 16px;
           height: 110px;
+          display: flex;
+          gap: 6px;
+        }
+        .bar-chart-y-axis {
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          font-family: 'IBM Plex Mono', monospace;
+          font-size: 8.5px;
+          color: #9FB3AC;
+          text-align: right;
+          padding-bottom: 12px;
+        }
+        .bar-chart-plot {
+          flex: 1;
+          position: relative;
+        }
+        .bar-chart-gridlines {
+          position: absolute;
+          inset: 0;
+          bottom: 12px;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+        }
+        .bar-chart-gridline {
+          border-top: 1px solid rgba(159,179,172,0.14);
+        }
+        .bar-chart-gridline:last-child {
+          border-top: 1px solid rgba(159,179,172,0.22);
+        }
+        .bar-chart-bars {
+          position: relative;
+          z-index: 1;
+          width: 100%;
+          height: 100%;
           display: flex;
           align-items: flex-end;
           gap: 3px;
