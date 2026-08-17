@@ -2,7 +2,10 @@
 // invia le notifiche push vere (Web Push standard: funzionano anche ad
 // app chiusa, se installata come PWA) quando:
 // 1) la coda supera la soglia impostata dal titolare (soglia_coda);
-// 2) un cliente arriva a 3 numeri o meno dal proprio turno.
+// 2) un cliente arriva a 3 numeri o meno dal proprio turno ("manca poco",
+//    una volta sola: la sottoscrizione resta viva, solo segnata);
+// 3) e' esattamente il turno del cliente (ticket_number == current):
+//    qui la sottoscrizione ha finito il suo lavoro e viene eliminata.
 //
 // Configurazione richiesta una tantum, da Supabase -> Edge Functions ->
 // send-push -> Secrets:
@@ -85,16 +88,18 @@ Deno.serve(async (req) => {
     }
   }
 
-  // --- 2) Avviso al cliente: mancano pochi numeri --------------------------
-  const { data: subsCliente } = await supabase
+  // --- 2) Avviso al cliente: mancano pochi numeri (una volta sola, non si
+  // elimina la sottoscrizione: serve ancora per il punto 3 qui sotto). ------
+  const { data: subsVicino } = await supabase
     .from("push_subscriptions")
     .select("*")
     .eq("business_id", businessId)
     .not("ticket_number", "is", null)
     .gt("ticket_number", current)
-    .lte("ticket_number", current + SOGLIA_AVVISO_CLIENTE);
+    .lte("ticket_number", current + SOGLIA_AVVISO_CLIENTE)
+    .eq("avviso_vicino_inviato", false);
 
-  for (const sub of subsCliente ?? []) {
+  for (const sub of subsVicino ?? []) {
     const posizione = sub.ticket_number - current - 1;
     await invia(sub, {
       title: `${record.name}: manca poco!`,
@@ -103,7 +108,23 @@ Deno.serve(async (req) => {
         : `Mancano solo ${posizione} numeri prima del tuo turno.`,
       url: "/",
     });
-    // Una sola notifica per ticket: la sottoscrizione ha fatto il suo lavoro.
+    await supabase.from("push_subscriptions").update({ avviso_vicino_inviato: true }).eq("id", sub.id);
+  }
+
+  // --- 3) Avviso al cliente: e' il suo turno -------------------------------
+  const { data: subsTurno } = await supabase
+    .from("push_subscriptions")
+    .select("*")
+    .eq("business_id", businessId)
+    .eq("ticket_number", current);
+
+  for (const sub of subsTurno ?? []) {
+    await invia(sub, {
+      title: `${record.name}: tocca a te!`,
+      body: "È il tuo turno, vai alla cassa.",
+      url: "/",
+    });
+    // Qui la sottoscrizione ha finito il suo lavoro: si elimina.
     await supabase.from("push_subscriptions").delete().eq("id", sub.id);
   }
 
