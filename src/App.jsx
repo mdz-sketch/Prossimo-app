@@ -173,6 +173,38 @@ const formatOra = (h) => `${String(h).padStart(2, "0")}:00`;
 // perderlo (e doverne prendere un altro, perdendo il proprio posto).
 const chiaveTicket = (businessId) => `prossimo_ticket_${businessId}`;
 
+// "Ding-dong" sintetizzato via Web Audio API quando arriva il turno del
+// cliente: niente file audio da scaricare. Riusa l'AudioContext passato
+// (creato/sbloccato altrove da un vero tocco dell'utente, es. il tasto
+// "Avvisami quando manca poco") perche' molti browser mobili non fanno
+// partire l'audio da un contesto creato senza un gesto dell'utente.
+const suonaCampanello = (ctx) => {
+  try {
+    const AudioCtx = ctx ? null : (window.AudioContext || window.webkitAudioContext);
+    const audioCtx = ctx || (AudioCtx && new AudioCtx());
+    if (!audioCtx) return;
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    const suonaNota = (freq, inizio, durata) => {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, audioCtx.currentTime + inizio);
+      gain.gain.linearRampToValueAtTime(0.3, audioCtx.currentTime + inizio + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + inizio + durata);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(audioCtx.currentTime + inizio);
+      osc.stop(audioCtx.currentTime + inizio + durata);
+    };
+    suonaNota(880, 0, 0.4); // "ding"
+    suonaNota(660, 0.35, 0.5); // "dong"
+  } catch {
+    // Web Audio non disponibile o bloccato dal browser: niente suono,
+    // vibrazione e notifica funzionano comunque indipendentemente.
+  }
+};
+
 const formatData = (iso) =>
   new Date(iso).toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" });
 
@@ -596,11 +628,24 @@ const handleLogout = async () => {
     () => typeof Notification !== "undefined" && Notification.permission === "granted"
   );
   const posizioneGiaNotificata = useRef(false);
+  // Creato/sbloccato qui, dentro un vero tocco dell'utente (il tasto
+  // "Avvisami quando manca poco"): riusato piu' tardi per il suono del
+  // proprio turno, che altrimenti su molti browser mobili non partirebbe
+  // (l'audio richiede un gesto dell'utente per essere sbloccato).
+  const audioCtxRef = useRef(null);
 
   const attivaNotificheCliente = async () => {
     if (typeof Notification === "undefined") {
       alert("Il tuo browser non supporta le notifiche.");
       return;
+    }
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (AudioCtx && !audioCtxRef.current) {
+      try {
+        audioCtxRef.current = new AudioCtx();
+      } catch {
+        // Web Audio non disponibile: pazienza, il resto funziona comunque.
+      }
     }
     const permesso = await Notification.requestPermission();
     setNotificheClienteAttive(permesso === "granted");
@@ -642,8 +687,22 @@ const handleLogout = async () => {
     if (isMyTurn) {
       setPulse(true);
       const t = setTimeout(() => setPulse(false), 1800);
+      // In un locale reale il telefono e' spesso in tasca o su un'altra
+      // app: il solo effetto visivo (1.8s) passa facilmente inosservato.
+      // Suono + vibrazione + notifica danno tre modi diversi di accorgersi
+      // che e' il proprio turno, ciascuno "best effort" (nessuno dei tre
+      // e' garantito su ogni browser/dispositivo, ma insieme coprono molti
+      // piu' casi del solo pulse).
+      suonaCampanello(audioCtxRef.current);
+      navigator.vibrate?.([200, 100, 200]);
+      if (typeof Notification !== "undefined" && Notification.permission === "granted" && activeBusiness) {
+        new Notification(`${activeBusiness.name}: tocca a te!`, {
+          body: "È il tuo turno, vai alla cassa.",
+        });
+      }
       return () => clearTimeout(t);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMyTurn]);
 
   // Link di invito operatore (/unisciti/<codice>): precompila il campo,
