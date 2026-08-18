@@ -645,25 +645,42 @@ const handleLogout = async () => {
     () => typeof Notification !== "undefined" && Notification.permission === "granted"
   );
   const posizioneGiaNotificata = useRef(false);
-  // Creato/sbloccato qui, dentro un vero tocco dell'utente (il tasto
-  // "Avvisami quando manca poco"): riusato piu' tardi per il suono del
-  // proprio turno, che altrimenti su molti browser mobili non partirebbe
-  // (l'audio richiede un gesto dell'utente per essere sbloccato).
+  // Riusato piu' tardi per il suono del proprio turno: un AudioContext
+  // creato senza un gesto dell'utente non parte su molti browser mobili,
+  // quindi va creato/sbloccato dentro un tocco vero. Non solo premendo
+  // "Avvisami quando manca poco" (vedi l'effect qui sotto, che lo sblocca
+  // al primo tocco qualsiasi sullo schermo): cosi' il suono funziona per
+  // chiunque abbia toccato lo schermo almeno una volta, senza dover
+  // abilitare esplicitamente nulla. La vibrazione non ha invece bisogno
+  // di nessuno sblocco, funziona gia' cosi' su ogni browser che la
+  // supporta (non iOS Safari, che non la implementa per nessun sito).
   const audioCtxRef = useRef(null);
+  const sbloccaAudio = () => {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (AudioCtx && !audioCtxRef.current) {
+      try {
+        audioCtxRef.current = new AudioCtx();
+      } catch {
+        // Web Audio non disponibile: pazienza, vibrazione/notifica funzionano comunque.
+      }
+    }
+  };
+
+  useEffect(() => {
+    window.addEventListener("pointerdown", sbloccaAudio, { once: true });
+    window.addEventListener("keydown", sbloccaAudio, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", sbloccaAudio);
+      window.removeEventListener("keydown", sbloccaAudio);
+    };
+  }, []);
 
   const attivaNotificheCliente = async () => {
     if (typeof Notification === "undefined") {
       alert("Il tuo browser non supporta le notifiche.");
       return;
     }
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (AudioCtx && !audioCtxRef.current) {
-      try {
-        audioCtxRef.current = new AudioCtx();
-      } catch {
-        // Web Audio non disponibile: pazienza, il resto funziona comunque.
-      }
-    }
+    sbloccaAudio();
     const permesso = await Notification.requestPermission();
     setNotificheClienteAttive(permesso === "granted");
     if (permesso === "granted" && activeBusiness && myTicket !== null) {
