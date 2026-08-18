@@ -173,6 +173,23 @@ const formatOra = (h) => `${String(h).padStart(2, "0")}:00`;
 // perderlo (e doverne prendere un altro, perdendo il proprio posto).
 const chiaveTicket = (businessId) => `prossimo_ticket_${businessId}`;
 
+// Il numero salvato va ripristinato solo se e' ancora "in vita" per la
+// coda attuale -- in attesa, o esattamente il proprio turno (>= current,
+// stessa soglia di giaServito altrove). Se invece current l'ha gia'
+// superato, appartiene a una visita precedente gia' conclusa: chi torna
+// piu' tardi nella stessa giornata (o un altro giorno) deve poterne
+// prendere uno nuovo subito, non restare bloccato a vedere il "grazie"
+// di un turno passato -- si scarta e si lascia via libera a un numero
+// nuovo, come se non ci fosse nulla di salvato.
+const ticketSalvatoValido = (businessId, currentAttuale) => {
+  const salvato = localStorage.getItem(chiaveTicket(businessId));
+  if (!salvato) return null;
+  const numero = parseInt(salvato, 10);
+  if (numero >= currentAttuale) return numero;
+  localStorage.removeItem(chiaveTicket(businessId));
+  return null;
+};
+
 // "Ding-dong" sintetizzato via Web Audio API quando arriva il turno del
 // cliente: niente file audio da scaricare. Riusa l'AudioContext passato
 // (creato/sbloccato altrove da un vero tocco dell'utente, es. il tasto
@@ -779,14 +796,17 @@ const handleLogout = async () => {
           localStorage.setItem("prossimo_active_business_id", data.id);
           setView("cliente");
 
-          // Questo dispositivo ha gia' un numero preso per questa stessa
-          // attivita' (es. la pagina si e' ricaricata, o il browser aveva
-          // scaricato la scheda in background): si recupera quello invece
-          // di prenderne un altro, altrimenti ogni reload avrebbe
+          // Questo dispositivo ha gia' un numero ancora valido per questa
+          // stessa attivita' (es. la pagina si e' ricaricata, o il browser
+          // aveva scaricato la scheda in background): si recupera quello
+          // invece di prenderne un altro, altrimenti ogni reload avrebbe
           // silenziosamente bruciato un numero e fatto perdere il posto.
-          const ticketSalvato = localStorage.getItem(chiaveTicket(data.id));
-          if (ticketSalvato) {
-            setMyTicket(parseInt(ticketSalvato, 10));
+          // Un numero gia' superato (visita precedente conclusa) viene
+          // scartato invece, cosi' chi torna piu' tardi puo' prenderne
+          // subito uno nuovo, come alla prima scansione.
+          const ticketValido = ticketSalvatoValido(data.id, data.current ?? 0);
+          if (ticketValido !== null) {
+            setMyTicket(ticketValido);
             return;
           }
 
@@ -818,8 +838,8 @@ const handleLogout = async () => {
         .then(({ data }) => {
           if (!data) return;
           setActiveBusiness(data);
-          const ticketSalvato = localStorage.getItem(chiaveTicket(data.id));
-          if (ticketSalvato) setMyTicket(parseInt(ticketSalvato, 10));
+          const ticketValido = ticketSalvatoValido(data.id, data.current ?? 0);
+          if (ticketValido !== null) setMyTicket(ticketValido);
         });
     }
   }, []);
