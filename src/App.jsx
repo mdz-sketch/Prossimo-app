@@ -1687,6 +1687,7 @@ const handleLogout = async () => {
         }
         .bar-chart-plot {
           flex: 1;
+          min-width: 0;
           position: relative;
         }
         .bar-chart-gridlines {
