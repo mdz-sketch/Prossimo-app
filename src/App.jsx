@@ -195,30 +195,50 @@ const ticketSalvatoValido = (businessId, currentAttuale) => {
 // (creato/sbloccato altrove da un vero tocco dell'utente, es. il tasto
 // "Avvisami quando manca poco") perche' molti browser mobili non fanno
 // partire l'audio da un contesto creato senza un gesto dell'utente.
+const suonaNotaWebAudio = (audioCtx, freq, inizio, durata, volume) => {
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = "sine";
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(0, audioCtx.currentTime + inizio);
+  gain.gain.linearRampToValueAtTime(volume, audioCtx.currentTime + inizio + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + inizio + durata);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start(audioCtx.currentTime + inizio);
+  osc.stop(audioCtx.currentTime + inizio + durata);
+};
+
 const suonaCampanello = (ctx) => {
   try {
     const AudioCtx = ctx ? null : (window.AudioContext || window.webkitAudioContext);
     const audioCtx = ctx || (AudioCtx && new AudioCtx());
     if (!audioCtx) return;
     if (audioCtx.state === "suspended") audioCtx.resume();
-    const suonaNota = (freq, inizio, durata) => {
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = "sine";
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0, audioCtx.currentTime + inizio);
-      gain.gain.linearRampToValueAtTime(0.3, audioCtx.currentTime + inizio + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + inizio + durata);
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      osc.start(audioCtx.currentTime + inizio);
-      osc.stop(audioCtx.currentTime + inizio + durata);
-    };
-    suonaNota(880, 0, 0.4); // "ding"
-    suonaNota(660, 0.35, 0.5); // "dong"
+    suonaNotaWebAudio(audioCtx, 880, 0, 0.4, 0.3); // "ding"
+    suonaNotaWebAudio(audioCtx, 660, 0.35, 0.5, 0.3); // "dong"
   } catch {
     // Web Audio non disponibile o bloccato dal browser: niente suono,
     // vibrazione e notifica funzionano comunque indipendentemente.
+  }
+};
+
+// Rintocco per lo schermo pubblico in negozio: deve farsi notare in una
+// stanza intera, non solo da chi tiene il telefono in mano -- volume piu'
+// alto e tre note (invece di due) invece del "ding-dong" personale sopra,
+// per distinguersi bene dal rumore ambiente.
+const suonaRintoccoSchermo = (ctx) => {
+  try {
+    const AudioCtx = ctx ? null : (window.AudioContext || window.webkitAudioContext);
+    const audioCtx = ctx || (AudioCtx && new AudioCtx());
+    if (!audioCtx) return;
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    suonaNotaWebAudio(audioCtx, 784, 0, 0.35, 0.55);
+    suonaNotaWebAudio(audioCtx, 988, 0.28, 0.35, 0.55);
+    suonaNotaWebAudio(audioCtx, 1175, 0.56, 0.55, 0.55);
+  } catch {
+    // Web Audio non disponibile o bloccato dal browser: niente suono, il
+    // resto della schermata (numeri, QR) funziona comunque.
   }
 };
 
@@ -770,31 +790,85 @@ const handleLogout = async () => {
   const schermoUltimoOkRef = useRef(null);
   const SOGLIA_CONNESSIONE_PERSA_MS = 90000;
 
+  const aggiornaSchermo = () => {
+    if (!schermoSlug) return;
+    schermoPubblico(schermoSlug)
+      .then((d) => {
+        setSchermoData(d);
+        setSchermoErrore("");
+        setSchermoConnessionePersa(false);
+        schermoUltimoOkRef.current = Date.now();
+      })
+      .catch((e) => {
+        if (e.message === "Attivita' non trovata" || e.message === "Schermo non abilitato per questa attivita'") {
+          setSchermoErrore(e.message);
+          return;
+        }
+        if (Date.now() - schermoUltimoOkRef.current > SOGLIA_CONNESSIONE_PERSA_MS) {
+          setSchermoConnessionePersa(true);
+        }
+      });
+  };
+
+  // Controllo periodico ogni 10s, di riserva -- l'aggiornamento vero e
+  // proprio arriva quasi all'istante dalla sottoscrizione realtime qui
+  // sotto (appena si conosce schermoData.id), questo e' solo una rete di
+  // sicurezza nel caso un evento realtime venga perso.
   useEffect(() => {
     if (view !== "schermo" || !schermoSlug) return;
     schermoUltimoOkRef.current = Date.now();
-    const aggiorna = () => {
-      schermoPubblico(schermoSlug)
-        .then((d) => {
-          setSchermoData(d);
-          setSchermoErrore("");
-          setSchermoConnessionePersa(false);
-          schermoUltimoOkRef.current = Date.now();
-        })
-        .catch((e) => {
-          if (e.message === "Attivita' non trovata" || e.message === "Schermo non abilitato per questa attivita'") {
-            setSchermoErrore(e.message);
-            return;
-          }
-          if (Date.now() - schermoUltimoOkRef.current > SOGLIA_CONNESSIONE_PERSA_MS) {
-            setSchermoConnessionePersa(true);
-          }
-        });
-    };
-    aggiorna();
-    const t = setInterval(aggiorna, 10000);
+    aggiornaSchermo();
+    const t = setInterval(aggiornaSchermo, 10000);
     return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, schermoSlug]);
+
+  // Stesso meccanismo realtime gia' usato dal pannello operatore: appena
+  // "current"/"last_issued" cambiano su Supabase, lo schermo si aggiorna
+  // subito invece di aspettare fino a 10s del prossimo controllo.
+  useEffect(() => {
+    if (view !== "schermo" || !schermoData?.id) return;
+    return ascoltaAggiornamenti(schermoData.id, aggiornaSchermo);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, schermoData?.id]);
+
+  // Rintocco sonoro ad ogni avanzamento del numero in servizio, pensato
+  // per farsi notare in tutta la stanza (vedi suonaRintoccoSchermo).
+  // L'AudioContext si sblocca al primo tocco/tasto sullo schermo (chi
+  // installa lo schermo in negozio tocca comunque lo schermo per
+  // impostarlo la prima volta).
+  const schermoAudioCtxRef = useRef(null);
+  const schermoUltimoNumeroRef = useRef(null);
+
+  useEffect(() => {
+    if (view !== "schermo") return;
+    const sblocca = () => {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtx && !schermoAudioCtxRef.current) {
+        try {
+          schermoAudioCtxRef.current = new AudioCtx();
+        } catch {
+          // Web Audio non disponibile: pazienza, il resto funziona comunque.
+        }
+      }
+    };
+    window.addEventListener("pointerdown", sblocca, { once: true });
+    window.addEventListener("keydown", sblocca, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", sblocca);
+      window.removeEventListener("keydown", sblocca);
+    };
+  }, [view]);
+
+  const schermoCurrentOggi = schermoData?.current_oggi;
+  useEffect(() => {
+    if (view !== "schermo" || schermoCurrentOggi === undefined) return;
+    const precedente = schermoUltimoNumeroRef.current;
+    if (precedente !== null && schermoCurrentOggi > precedente) {
+      suonaRintoccoSchermo(schermoAudioCtxRef.current);
+    }
+    schermoUltimoNumeroRef.current = schermoCurrentOggi;
+  }, [view, schermoCurrentOggi]);
 
   // Al primo avvio, se c'era un'attivita' scelta in precedenza, la ricarica
   useEffect(() => {
@@ -1141,7 +1215,7 @@ const handleLogout = async () => {
           }
           .schermo-header {
             text-align: center;
-            padding: 3vmin 4vmin 0;
+            padding: 3vmin 150px 0 4vmin;
             font-size: clamp(16px, 3vmin, 30px);
             font-weight: 800;
             font-family: 'Archivo', sans-serif;
@@ -1198,16 +1272,54 @@ const handleLogout = async () => {
             border-radius: 999px;
             white-space: nowrap;
           }
+          .schermo-qr-corner {
+            position: fixed;
+            top: 2vmin;
+            right: 2vmin;
+            background: #F1ECDA;
+            border-radius: 1.2vmin;
+            padding: 1.2vmin;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.7vmin;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+          }
+          .schermo-qr-corner-label {
+            font-family: 'IBM Plex Sans', sans-serif;
+            font-weight: 700;
+            font-size: clamp(9px, 1.2vmin, 13px);
+            color: #16302B;
+            text-align: center;
+            max-width: 120px;
+            line-height: 1.2;
+          }
           @media (orientation: portrait) {
             .schermo-split { flex-direction: column; }
             .schermo-col-serve { border-right: none; border-bottom: 1px solid rgba(241,236,218,0.15); }
             .schermo-numero-servito { font-size: clamp(60px, 15vmin, 220px); }
+          }
+          @media (max-width: 480px) {
+            .schermo-header { padding-right: 90px; }
+            .schermo-qr-corner { transform: scale(0.75); transform-origin: top right; }
+            .schermo-qr-corner-label { display: none; }
           }
         `}</style>
         {schermoData && schermoConnessionePersa && (
           <div className="schermo-banner-offline">
             <AlertTriangle size={13} style={{ display: "inline", marginRight: 6, position: "relative", top: -1 }} />
             Connessione assente — numeri non aggiornati
+          </div>
+        )}
+        {schermoData && schermoSlug && (
+          <div className="schermo-qr-corner">
+            <QRCodeSVG
+              value={`${window.location.origin}/coda/${schermoSlug}`}
+              size={100}
+              bgColor="#F1ECDA"
+              fgColor="#16302B"
+            />
+            <div className="schermo-qr-corner-label">Scansiona per il tuo numero</div>
           </div>
         )}
         {schermoErrore ? (
