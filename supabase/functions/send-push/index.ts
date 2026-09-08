@@ -1,6 +1,7 @@
 // Riceve il payload di un Database Webhook su UPDATE di "businesses" e
 // invia le notifiche push vere (Web Push standard: funzionano anche ad
-// app chiusa, se installata come PWA) quando:
+// app chiusa, se installata come PWA) e/o SMS (Twilio, se configurato)
+// quando:
 // 1) la coda supera la soglia impostata dal titolare (soglia_coda);
 // 2) un cliente arriva a 3 numeri o meno dal proprio turno ("manca poco",
 //    una volta sola: la sottoscrizione resta viva, solo segnata);
@@ -13,6 +14,12 @@
 //   frontend: la chiave pubblica e' anche in src/lib/push.js. Non
 //   rigenerarle dopo il primo deploy, invaliderebbe tutte le
 //   sottoscrizioni gia' salvate).
+// - TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER (solo se si
+//   vuole anche l'SMS: senza queste l'invio SMS viene saltato in
+//   silenzio, il push continua a funzionare comunque). L'SMS al cliente
+//   va comunque abilitato per-attivita' dal titolare (businesses.
+//   sms_abilitato), quindi non parte mai per un'attivita' che non l'ha
+//   attivato esplicitamente.
 // SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY sono gia' disponibili di
 // default in ogni Edge Function Supabase, non serve impostarle a mano.
 //
@@ -26,6 +33,10 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 const VAPID_PUBLIC_KEY = Deno.env.get("VAPID_PUBLIC_KEY")!;
 const VAPID_PRIVATE_KEY = Deno.env.get("VAPID_PRIVATE_KEY")!;
 webpush.setVapidDetails("mailto:info@prossimo.app", VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+
+const TWILIO_ACCOUNT_SID = Deno.env.get("TWILIO_ACCOUNT_SID");
+const TWILIO_AUTH_TOKEN = Deno.env.get("TWILIO_AUTH_TOKEN");
+const TWILIO_FROM_NUMBER = Deno.env.get("TWILIO_FROM_NUMBER");
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -49,6 +60,34 @@ async function invia(sub: { id: string; endpoint: string; p256dh: string; auth: 
     } else {
       console.error("Invio push fallito:", err);
     }
+  }
+}
+
+// Chiamata REST diretta all'API di Twilio (nessun SDK: piu' semplice da
+// far girare su Deno). Se le secrets non sono configurate, salta senza
+// errori -- il resto della function (push) deve continuare a funzionare
+// anche per chi non ha mai configurato l'SMS.
+async function inviaSms(telefono: string, corpo: string) {
+  if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN || !TWILIO_FROM_NUMBER) return;
+  try {
+    const auth = btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`);
+    const body = new URLSearchParams({ To: telefono, From: TWILIO_FROM_NUMBER, Body: corpo });
+    const res = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${auth}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body,
+      }
+    );
+    if (!res.ok) {
+      console.error("Invio SMS fallito:", await res.text());
+    }
+  } catch (err) {
+    console.error("Invio SMS fallito:", err);
   }
 }
 
@@ -88,7 +127,7 @@ Deno.serve(async (req) => {
     }
   }
 
-  // --- 2) Avviso al cliente: mancano pochi numeri (una volta sola, non si
+  // --- 2) Push al cliente: mancano pochi numeri (una volta sola, non si
   // elimina la sottoscrizione: serve ancora per il punto 3 qui sotto). ------
   const { data: subsVicino } = await supabase
     .from("push_subscriptions")
@@ -111,7 +150,7 @@ Deno.serve(async (req) => {
     await supabase.from("push_subscriptions").update({ avviso_vicino_inviato: true }).eq("id", sub.id);
   }
 
-  // --- 3) Avviso al cliente: e' il suo turno -------------------------------
+  // --- 3) Push al cliente: e' il suo turno ---------------------------------
   const { data: subsTurno } = await supabase
     .from("push_subscriptions")
     .select("*")
@@ -126,6 +165,40 @@ Deno.serve(async (req) => {
     });
     // Qui la sottoscrizione ha finito il suo lavoro: si elimina.
     await supabase.from("push_subscriptions").delete().eq("id", sub.id);
+  }
+
+  // --- 4) SMS al cliente: mancano pochi numeri (stessa logica del push,
+  // tabella separata perche' sms_notifiche non richiede permessi/gesture
+  // del browser, solo un numero di telefono). -------------------------------
+  if (record.sms_abilitato) {
+    const { data: smsVicino } = await supabase
+      .from("sms_notifiche")
+      .select("*")
+      .eq("business_id", businessId)
+      .gt("ticket_number", current)
+      .lte("ticket_number", current + SOGLIA_AVVISO_CLIENTE)
+      .eq("avviso_vicino_inviato", false);
+
+    for (const sms of smsVicino ?? []) {
+      const posizione = sms.ticket_number - current - 1;
+      await inviaSms(
+        sms.telefono,
+        `${record.name}: ${posizione <= 0 ? "tocca a te tra pochissimo, preparati." : `mancano solo ${posizione} numeri prima del tuo turno.`}`
+      );
+      await supabase.from("sms_notifiche").update({ avviso_vicino_inviato: true }).eq("id", sms.id);
+    }
+
+    // --- 5) SMS al cliente: e' il suo turno ---------------------------------
+    const { data: smsTurno } = await supabase
+      .from("sms_notifiche")
+      .select("*")
+      .eq("business_id", businessId)
+      .eq("ticket_number", current);
+
+    for (const sms of smsTurno ?? []) {
+      await inviaSms(sms.telefono, `${record.name}: e' il tuo turno, vai alla cassa.`);
+      await supabase.from("sms_notifiche").delete().eq("id", sms.id);
+    }
   }
 
   return new Response("ok", { status: 200 });

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, BarChart3, MapPin, Tag, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Printer, AlertTriangle, Download, Users, Mail, ShieldCheck, Monitor, Type } from "lucide-react";
+import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, BarChart3, MapPin, Tag, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Printer, AlertTriangle, Download, Users, Mail, ShieldCheck, Monitor, Type, MessageSquare } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "./lib/supabaseClient";
 import Login from "./components/Login";
@@ -26,6 +26,7 @@ import {
   modificaEmailUtenteAdmin,
   eliminaUtenteAdmin,
   schermoPubblico,
+  iscrizioneSms,
 } from "./lib/queries";
 import { esportaCsv, esportaPdf, apriQrPdf, condividiQrPdf } from "./lib/export";
 import { sottoscriviPush } from "./lib/push";
@@ -597,6 +598,10 @@ const handleLogout = async () => {
   const [formSogliaCoda, setFormSogliaCoda] = useState("");
   const [formSogliaAttesa, setFormSogliaAttesa] = useState("");
   const [formSchermoAbilitato, setFormSchermoAbilitato] = useState(true);
+  // Di default disattivato (a differenza dello schermo): richiede un
+  // provider SMS a pagamento gia' configurato dal titolare, non va
+  // acceso finche' lui non lo fa esplicitamente.
+  const [formSmsAbilitato, setFormSmsAbilitato] = useState(false);
   const [errore, setErrore] = useState("");
 
   const toggleGiornoApertura = (jsDay) => {
@@ -727,6 +732,31 @@ const handleLogout = async () => {
       } catch (e) {
         console.error("Sottoscrizione push non riuscita:", e);
       }
+    }
+  };
+
+  // Avviso via SMS: alternativa alla notifica push per chi non vuole
+  // tenere la scheda del browser aperta o concedere permessi di notifica
+  // -- funziona su qualsiasi telefono, disponibile solo se il titolare
+  // l'ha attivata (activeBusiness.sms_abilitato). "smsTicket" (invece di
+  // un booleano) tiene traccia di PER QUALE ticket e' stata attivata:
+  // cosi' smsAttivo si "resetta" da solo quando myTicket cambia, senza
+  // bisogno di un effect dedicato solo a reimpostare lo stato.
+  const [telefonoSms, setTelefonoSms] = useState("");
+  const [smsTicket, setSmsTicket] = useState(null);
+  const smsAttivo = smsTicket !== null && smsTicket === myTicket;
+
+  const attivaSmsCliente = async () => {
+    if (!telefonoSms.trim()) {
+      alert("Inserisci un numero di telefono.");
+      return;
+    }
+    try {
+      await iscrizioneSms(activeBusiness.id, myTicket, telefonoSms.trim());
+      setSmsTicket(myTicket);
+    } catch (e) {
+      console.error("Iscrizione SMS non riuscita:", e);
+      alert("Non è stato possibile attivare l'avviso via SMS. Riprova.");
     }
   };
 
@@ -1061,6 +1091,7 @@ const handleLogout = async () => {
     setFormSogliaCoda(b.soglia_coda != null ? String(b.soglia_coda) : "");
     setFormSogliaAttesa(b.soglia_attesa != null ? String(b.soglia_attesa) : "");
     setFormSchermoAbilitato(b.schermo_abilitato ?? true);
+    setFormSmsAbilitato(b.sms_abilitato ?? false);
     setAttivitaInModifica(b);
     setVistaProvenienzaModifica(provenienza);
     setRegistered(false);
@@ -1096,6 +1127,7 @@ const handleLogout = async () => {
       soglia_coda: formSogliaCoda === "" ? null : Number(formSogliaCoda),
       soglia_attesa: formSogliaAttesa === "" ? null : Number(formSogliaAttesa),
       schermo_abilitato: formSchermoAbilitato,
+      sms_abilitato: formSmsAbilitato,
     };
 
     if (attivitaInModifica) {
@@ -1152,6 +1184,7 @@ const handleLogout = async () => {
     setFormSogliaCoda("");
     setFormSogliaAttesa("");
     setFormSchermoAbilitato(true);
+    setFormSmsAbilitato(false);
     setVistaProvenienzaModifica("operatore");
   };
 
@@ -1677,6 +1710,22 @@ const handleLogout = async () => {
           font-size: 14px;
           box-sizing: border-box;
         }
+        .ticket-field-input {
+          width: 100%;
+          background: #FBF8EE;
+          border: 1px solid rgba(22,48,43,0.2);
+          border-radius: 10px;
+          padding: 12px 13px;
+          color: #16302B;
+          font-family: 'IBM Plex Sans', sans-serif;
+          font-size: 14px;
+          box-sizing: border-box;
+          margin-bottom: 10px;
+        }
+        .testo-grande .ticket-field-input {
+          font-size: 18px;
+          padding: 15px 16px;
+        }
         .field-input::placeholder { color: rgba(159,179,172,0.5); }
         .field-input:focus { outline: none; border-color: #C99A3E; }
 
@@ -2027,6 +2076,27 @@ const handleLogout = async () => {
                 <button className="cta ghost" onClick={attivaNotificheCliente}>
                   <Bell size={15} /> Avvisami quando manca poco
                 </button>
+              )}
+              {!giaServito && activeBusiness.sms_abilitato && (
+                smsAttivo ? (
+                  <p className="ticket-msg-sm" style={{ color: "rgba(22,48,43,0.65)", marginTop: 12, textAlign: "center" }}>
+                    <MessageSquare size={13} style={{ display: "inline", marginRight: 4, position: "relative", top: -1 }} />
+                    Ti avviseremo via SMS al {telefonoSms}
+                  </p>
+                ) : (
+                  <div style={{ marginTop: 12 }}>
+                    <input
+                      type="tel"
+                      className="ticket-field-input"
+                      placeholder="Il tuo numero di telefono"
+                      value={telefonoSms}
+                      onChange={(e) => setTelefonoSms(e.target.value)}
+                    />
+                    <button className="cta ghost" onClick={attivaSmsCliente}>
+                      <MessageSquare size={15} /> Avvisami via SMS
+                    </button>
+                  </div>
+                )
               )}
               <button className="cta ghost" onClick={annulla}>
                 <X size={15} /> Annulla prenotazione
@@ -2640,6 +2710,15 @@ const handleLogout = async () => {
                     </button>
                   </>
                 )}
+
+                <label className="field-label"><MessageSquare size={13} style={{ display: "inline", marginRight: 5, position: "relative", top: -1 }} />Avviso via SMS ai clienti</label>
+                <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: -4, marginBottom: 8 }}>
+                  In alternativa alla notifica push, i clienti potranno lasciare un numero di telefono per essere avvisati via SMS. Richiede un provider SMS a pagamento gia' configurato (costo per messaggio inviato) — attivalo solo dopo aver completato quella configurazione.
+                </p>
+                <div className="chip-row">
+                  <button type="button" className={"chip" + (formSmsAbilitato ? " active" : "")} onClick={() => setFormSmsAbilitato(true)}>Attivo</button>
+                  <button type="button" className={"chip" + (!formSmsAbilitato ? " active" : "")} onClick={() => setFormSmsAbilitato(false)}>Disattivato</button>
+                </div>
 
                 <button className="cta primary" onClick={salvaAttivita} disabled={!formName.trim()} style={{ marginTop: 18 }}>
                   {attivitaInModifica ? (

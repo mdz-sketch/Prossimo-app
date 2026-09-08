@@ -369,6 +369,17 @@ export async function schermoPubblico(slug) {
   return data?.[0] ?? null;
 }
 
+// --- Avviso SMS per il cliente (alternativa alla notifica push) -----------
+export async function iscrizioneSms(businessId, ticketNumber, telefono) {
+  const { error } = await supabase
+    .from("sms_notifiche")
+    .upsert(
+      { business_id: businessId, ticket_number: ticketNumber, telefono },
+      { onConflict: "business_id,ticket_number" }
+    );
+  if (error) throw error;
+}
+
 // --- Realtime: iscriviti agli aggiornamenti di un'attività ----------------
 export function ascoltaAggiornamenti(businessId, callback) {
   const channel = supabase
