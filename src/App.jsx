@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, BarChart3, MapPin, Tag, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Printer, AlertTriangle, Download, Users, Mail, ShieldCheck, Monitor } from "lucide-react";
+import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, BarChart3, MapPin, Tag, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Printer, AlertTriangle, Download, Users, Mail, ShieldCheck, Monitor, Type } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "./lib/supabaseClient";
 import Login from "./components/Login";
@@ -505,6 +505,20 @@ const handleLogout = async () => {
     } finally {
       setInvitoInCorso(false);
     }
+  };
+
+  // Testo grande per il cliente: molte code fisiche (farmacie, uffici) hanno
+  // un pubblico che fatica a leggere testo piccolo. Preferenza per-dispositivo,
+  // persistita cosi' resta impostata anche dopo un reload.
+  const [testoGrande, setTestoGrande] = useState(
+    () => localStorage.getItem("prossimo_testo_grande") === "1"
+  );
+  const attivaTestoGrande = () => {
+    setTestoGrande((v) => {
+      const nuovo = !v;
+      localStorage.setItem("prossimo_testo_grande", nuovo ? "1" : "0");
+      return nuovo;
+    });
   };
 
   const [myTicket, setMyTicket] = useState(null);
@@ -1548,6 +1562,34 @@ const handleLogout = async () => {
           50% { box-shadow: 0 0 0 10px rgba(183,71,42,0.0), 0 0 24px 4px rgba(183,71,42,0.55); }
         }
 
+        .ticket-title {
+          font-family: 'Archivo', sans-serif;
+          font-weight: 800;
+          font-size: 18px;
+          margin-top: 8px;
+        }
+        .ticket-msg { font-size: 13px; }
+        .ticket-msg-sm { font-size: 11.5px; }
+
+        /* Testo grande per il cliente: molte code fisiche (farmacie, uffici)
+           hanno un pubblico che fatica a leggere testo piccolo. Ogni regola
+           qui ingrandisce la sua controparte normale di circa 1.3-1.4x. */
+        .testo-grande .eyebrow { font-size: 14px; }
+        .testo-grande .ticket-title { font-size: 24px; }
+        .testo-grande .ticket-msg { font-size: 18px; }
+        .testo-grande .ticket-msg-sm { font-size: 15px; }
+        .testo-grande .status-label { font-size: 18px; }
+        .testo-grande .status-value { font-size: 21px; }
+        .testo-grande .turn-banner { font-size: 19px; padding: 20px 22px; }
+        .testo-grande .turn-banner svg { width: 26px; height: 26px; }
+        .testo-grande .cta { font-size: 19px; padding: 19px 22px; }
+        .testo-grande .cta svg { width: 20px; height: 20px; }
+        .testo-grande .flap-row.lg .flap-shell { width: 74px; height: 100px; }
+        .testo-grande .flap-row.lg .flap-face { font-size: 58px; }
+        .testo-grande .flap-row.sm .flap-shell { width: 40px; height: 56px; }
+        .testo-grande .flap-row.sm .flap-face { font-size: 30px; }
+        .testo-grande-toggle svg { flex-shrink: 0; }
+
         .board-panel {
           margin-top: 22px;
           background: #0F211D;
@@ -1903,10 +1945,11 @@ const handleLogout = async () => {
         )}
 
         {view === "cliente" ? (
-          !activeBusiness ? (
+          <div className={testoGrande ? "testo-grande" : undefined}>
+          {!activeBusiness ? (
             <div className="board-panel">
               <div className="board-label">Nessuna attivita' selezionata</div>
-              <p style={{ fontSize: 13, color: "#9FB3AC" }}>
+              <p className="ticket-msg" style={{ color: "#9FB3AC" }}>
                 Scansiona il QR code esposto nel locale per prendere il tuo numero.
               </p>
             </div>
@@ -1916,13 +1959,13 @@ const handleLogout = async () => {
               <div style={{ margin: "18px 0 6px" }}>
                 <Clock size={48} color="#16302B" style={{ margin: "0 auto" }} />
               </div>
-              <div style={{ fontFamily: "'Archivo', sans-serif", fontWeight: 800, fontSize: 18, marginTop: 8 }}>
+              <div className="ticket-title">
                 Grazie per essere passato/a!
               </div>
-              <p style={{ fontSize: 13, color: "rgba(22,48,43,0.65)", marginTop: 8 }}>
+              <p className="ticket-msg" style={{ color: "rgba(22,48,43,0.65)", marginTop: 8 }}>
                 Al momento siamo chiusi. {statoOrari.prossimaAperturaLabel}.
               </p>
-              <p style={{ fontSize: 11.5, color: "rgba(22,48,43,0.5)", marginTop: 6 }}>
+              <p className="ticket-msg-sm" style={{ color: "rgba(22,48,43,0.5)", marginTop: 6 }}>
                 Orario: {formatOra(statoOrari.apertura)}–{formatOra(statoOrari.chiusura)}
               </p>
             </div>
@@ -1932,7 +1975,7 @@ const handleLogout = async () => {
               <div style={{ margin: "18px 0 6px" }}>
                 <QrCode size={64} color="#16302B" style={{ margin: "0 auto" }} />
               </div>
-              <p style={{ fontSize: 13, color: "rgba(22,48,43,0.65)", marginTop: 10 }}>
+              <p className="ticket-msg" style={{ color: "rgba(22,48,43,0.65)", marginTop: 10 }}>
                 Tocca il pulsante per prendere il tuo numero.
               </p>
               <button className="cta primary" onClick={prendiNumero}>
@@ -1989,7 +2032,13 @@ const handleLogout = async () => {
                 <X size={15} /> Annulla prenotazione
               </button>
             </div>
-          )
+          )}
+          {activeBusiness && (
+            <button className="cta ghost testo-grande-toggle" onClick={attivaTestoGrande}>
+              <Type size={15} /> {testoGrande ? "Testo normale" : "Testo grande"}
+            </button>
+          )}
+          </div>
          ) : view === "operatore" ? (
           !isLoggedIn ? (
             <Login onLoginSuccess={handleLoginSuccess} />
