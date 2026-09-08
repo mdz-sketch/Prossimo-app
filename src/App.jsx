@@ -30,6 +30,9 @@ import {
   creaPrenotazione,
   statoPrenotazione,
   annullaPrenotazione,
+  chiamaPrioritario,
+  completaPrioritario,
+  annullaPrioritario,
 } from "./lib/queries";
 import { esportaCsv, esportaPdf, apriQrPdf, condividiQrPdf } from "./lib/export";
 import { sottoscriviPush } from "./lib/push";
@@ -652,8 +655,13 @@ const handleLogout = async () => {
   const lastIssued = activeBusiness?.last_issued ?? 0;
   const inCoda = Math.max(lastIssued - current, 0);
   const position = myTicket ? Math.max(myTicket - current - 1, 0) : null;
-  const isMyTurn = myTicket !== null && current === myTicket;
-  const giaServito = myTicket !== null && current > myTicket;
+  // Un numero chiamato con priorita' (fuori ordine, vedi migrazione
+  // 20260908020000) e' "il tuo turno" per chi ce l'ha, e resta "gia'
+  // servito" per sempre dopo -- anche se "current" non arrivera' mai a
+  // quel numero specifico, perche' current non si sposta per le chiamate
+  // prioritarie.
+  const isMyTurn = myTicket !== null && (current === myTicket || activeBusiness?.chiamata_prioritaria === myTicket);
+  const giaServito = myTicket !== null && (current > myTicket || activeBusiness?.ultimo_prioritario_servito === myTicket);
   const isNext = myTicket !== null && position === 0 && !isMyTurn && !giaServito;
   // Numeri mostrati all'utente: solo quelli di oggi (current/myTicket sono
   // contatori cumulativi su tutta la storia dell'attivita').
@@ -1018,6 +1026,7 @@ const handleLogout = async () => {
   // impostarlo la prima volta).
   const schermoAudioCtxRef = useRef(null);
   const schermoUltimoNumeroRef = useRef(null);
+  const schermoUltimoPrioritarioRef = useRef(null);
 
   useEffect(() => {
     if (view !== "schermo") return;
@@ -1048,6 +1057,18 @@ const handleLogout = async () => {
     }
     schermoUltimoNumeroRef.current = schermoCurrentOggi;
   }, [view, schermoCurrentOggi]);
+
+  // Stesso rintocco importante anche per una nuova chiamata prioritaria:
+  // chi e' stato chiamato con priorita' potrebbe non avere occhi
+  // sull'app, solo sullo schermo pubblico del negozio.
+  const schermoPrioritarioOggi = schermoData?.chiamata_prioritaria_oggi;
+  useEffect(() => {
+    if (view !== "schermo" || schermoPrioritarioOggi === undefined) return;
+    if (schermoPrioritarioOggi !== null && schermoPrioritarioOggi !== schermoUltimoPrioritarioRef.current) {
+      suonaRintoccoSchermo(schermoAudioCtxRef.current);
+    }
+    schermoUltimoPrioritarioRef.current = schermoPrioritarioOggi;
+  }, [view, schermoPrioritarioOggi]);
 
   // Al primo avvio, se c'era un'attivita' scelta in precedenza, la ricarica
   useEffect(() => {
@@ -1217,6 +1238,37 @@ const handleLogout = async () => {
     try {
       await nonPresenteSupabase(activeBusiness.id);
       refreshStats(activeBusiness.id);
+    } catch (e) {
+      setErrore(e.message);
+    }
+  };
+
+  // Chiamata prioritaria: l'operatore tocca uno dei numeri "in attesa" per
+  // farlo passare subito, fuori ordine (es. persona con disabilita').
+  const richiediPrioritario = async (numero, numeroOggi) => {
+    if (!activeBusiness) return;
+    if (!window.confirm(`Chiamare subito il numero #${numeroOggi} con priorita', fuori ordine?`)) return;
+    try {
+      await chiamaPrioritario(activeBusiness.id, numero);
+    } catch (e) {
+      setErrore(e.message);
+    }
+  };
+
+  const confermaPrioritarioServito = async () => {
+    if (!activeBusiness) return;
+    try {
+      await completaPrioritario(activeBusiness.id);
+      refreshStats(activeBusiness.id);
+    } catch (e) {
+      setErrore(e.message);
+    }
+  };
+
+  const annullaChiamataPrioritaria = async () => {
+    if (!activeBusiness) return;
+    try {
+      await annullaPrioritario(activeBusiness.id);
     } catch (e) {
       setErrore(e.message);
     }
@@ -1470,6 +1522,18 @@ const handleLogout = async () => {
             border-radius: 999px;
             white-space: nowrap;
           }
+          .schermo-banner-priorita {
+            width: 100%;
+            background: #C99A3E;
+            color: #16302B;
+            font-size: clamp(16px, 3vmin, 30px);
+            font-weight: 800;
+            font-family: 'Archivo', sans-serif;
+            padding: 2vmin;
+            border-radius: 14px;
+            text-align: center;
+            margin-bottom: 2vmin;
+          }
           .schermo-qr-corner {
             position: fixed;
             top: 2vmin;
@@ -1542,6 +1606,11 @@ const handleLogout = async () => {
           </div>
         ) : (
           <>
+            {schermoData.chiamata_prioritaria_oggi != null && (
+              <div className="schermo-banner-priorita">
+                Chiamata prioritaria: #{schermoData.chiamata_prioritaria_oggi}
+              </div>
+            )}
             <div className="schermo-header">{schermoData.nome}</div>
             <div className="schermo-split">
               <div className="schermo-col schermo-col-serve">
@@ -1841,6 +1910,14 @@ const handleLogout = async () => {
           padding: 5px 9px;
           white-space: nowrap;
           flex-shrink: 0;
+        }
+        .queue-chip-clickable {
+          border: 1px solid rgba(201,154,62,0.4);
+          cursor: pointer;
+        }
+        .queue-chip-clickable:disabled {
+          opacity: 0.5;
+          cursor: default;
         }
 
         .field-label {
@@ -2459,6 +2536,23 @@ const handleLogout = async () => {
               <div className="board-label">{activeBusiness.name} — Ora in servizio</div>
               <FlapNumber value={currentOggi} size="lg" />
 
+              {activeBusiness.chiamata_prioritaria != null && (
+                <div className="turn-banner" style={{ background: "#C99A3E", color: "#16302B", flexDirection: "column", alignItems: "stretch", gap: 10 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <Bell size={20} />
+                    Chiamata prioritaria: #{activeBusiness.chiamata_prioritaria - baselineOggi}
+                  </div>
+                  <div className="op-actions">
+                    <button className="cta dark" onClick={confermaPrioritarioServito}>
+                      <CheckCircle2 size={16} /> Servito
+                    </button>
+                    <button className="cta" style={{ margin: 0, background: "transparent", color: "#16302B", border: "1px solid rgba(22,48,43,0.35)" }} onClick={annullaChiamataPrioritaria}>
+                      <X size={16} /> Annulla
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {allertaCodaLunga && (
                 <div className="turn-banner" style={{ background: "#B7472A", color: "#F1ECDA" }}>
                   <AlertTriangle size={20} />
@@ -2513,10 +2607,24 @@ const handleLogout = async () => {
               <div className="board-label">In attesa</div>
               <div className="queue-strip">
                 {Array.from({ length: inCoda }).map((_, i) => (
-                  <span className="queue-chip" key={i}>#{currentOggi + i + 1}</span>
+                  <button
+                    type="button"
+                    className="queue-chip queue-chip-clickable"
+                    key={i}
+                    disabled={activeBusiness.chiamata_prioritaria != null}
+                    onClick={() => richiediPrioritario(current + i + 1, currentOggi + i + 1)}
+                    title="Chiama con priorita', fuori ordine"
+                  >
+                    #{currentOggi + i + 1}
+                  </button>
                 ))}
                 {inCoda === 0 && <span style={{ fontSize: 13, color: "#9FB3AC" }}>Nessuno in coda al momento.</span>}
               </div>
+              {inCoda > 0 && (
+                <p style={{ fontSize: 11, color: "#9FB3AC", marginTop: 6 }}>
+                  Tocca un numero per chiamarlo subito con priorita', fuori ordine.
+                </p>
+              )}
 
               <div className="stats-divider" />
 
