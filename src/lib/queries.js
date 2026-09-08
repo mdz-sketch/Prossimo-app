@@ -369,6 +369,45 @@ export async function schermoPubblico(slug) {
   return data?.[0] ?? null;
 }
 
+// --- Avviso SMS per il cliente (alternativa alla notifica push) -----------
+export async function iscrizioneSms(businessId, ticketNumber, telefono) {
+  const { error } = await supabase
+    .from("sms_notifiche")
+    .upsert(
+      { business_id: businessId, ticket_number: ticketNumber, telefono },
+      { onConflict: "business_id,ticket_number" }
+    );
+  if (error) throw error;
+}
+
+// --- Prenotazione di una fascia oraria (alternativa a "prendi numero" sul
+// posto): il numero di coda vero viene assegnato in automatico quando
+// arriva l'orario prenotato. -------------------------------------------
+export async function creaPrenotazione(businessId, slotStart, telefono) {
+  const { data, error } = await supabase.rpc("crea_prenotazione", {
+    business_id_input: businessId,
+    slot_start_input: slotStart.toISOString(),
+    telefono_input: telefono || null,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function statoPrenotazione(prenotazioneId) {
+  const { data, error } = await supabase.rpc("stato_prenotazione", {
+    prenotazione_id_input: prenotazioneId,
+  });
+  if (error) throw error;
+  return data?.[0] ?? null;
+}
+
+export async function annullaPrenotazione(prenotazioneId) {
+  const { error } = await supabase.rpc("annulla_prenotazione", {
+    prenotazione_id_input: prenotazioneId,
+  });
+  if (error) throw error;
+}
+
 // --- Realtime: iscriviti agli aggiornamenti di un'attività ----------------
 export function ascoltaAggiornamenti(businessId, callback) {
   const channel = supabase
