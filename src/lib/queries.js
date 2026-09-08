@@ -43,6 +43,29 @@ export async function nonPresente(businessId) {
   return data;
 }
 
+// --- Operatore: chiamata prioritaria (fuori ordine, senza spostare current) ---
+export async function chiamaPrioritario(businessId, numero) {
+  const { error } = await supabase.rpc("chiama_prioritario", {
+    business_id_input: businessId,
+    numero_input: numero,
+  });
+  if (error) throw error;
+}
+
+export async function completaPrioritario(businessId) {
+  const { error } = await supabase.rpc("completa_prioritario", {
+    business_id_input: businessId,
+  });
+  if (error) throw error;
+}
+
+export async function annullaPrioritario(businessId) {
+  const { error } = await supabase.rpc("annulla_prioritario", {
+    business_id_input: businessId,
+  });
+  if (error) throw error;
+}
+
 // --- Numerazione giornaliera: quanti numeri erano gia' stati emessi prima
 // di oggi (es. 1827), cosi' la UI puo' mostrare solo i numeri di oggi
 // (es. 37) sottraendo questa base da "current"/"last_issued"/il proprio
