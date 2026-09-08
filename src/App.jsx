@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, BarChart3, MapPin, Tag, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Printer, AlertTriangle, Download, Users, Mail, ShieldCheck, Monitor, Type, MessageSquare } from "lucide-react";
+import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, BarChart3, MapPin, Tag, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Printer, AlertTriangle, Download, Users, Mail, ShieldCheck, Monitor, Type, MessageSquare, CalendarClock } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "./lib/supabaseClient";
 import Login from "./components/Login";
@@ -27,6 +27,9 @@ import {
   eliminaUtenteAdmin,
   schermoPubblico,
   iscrizioneSms,
+  creaPrenotazione,
+  statoPrenotazione,
+  annullaPrenotazione,
 } from "./lib/queries";
 import { esportaCsv, esportaPdf, apriQrPdf, condividiQrPdf } from "./lib/export";
 import { sottoscriviPush } from "./lib/push";
@@ -167,6 +170,27 @@ const percentualeNonPresenti = (serviti, nonPresentati) => {
 };
 
 const formatOra = (h) => `${String(h).padStart(2, "0")}:00`;
+const formatOrarioSlot = (data) =>
+  `${String(data.getHours()).padStart(2, "0")}:${String(data.getMinutes()).padStart(2, "0")}`;
+
+// Fasce orarie prenotabili oggi, dall'orario attuale (con un margine di
+// almeno uno slot pieno, non ha senso proporre una fascia che sta gia'
+// per iniziare) fino alla chiusura, ogni "slot_prenotazione_minuti".
+const generaSlotDisponibili = (business, adesso) => {
+  const minuti = business.slot_prenotazione_minuti || 30;
+  const margineMs = minuti * 60000;
+  const inizioGiorno = new Date(adesso);
+  inizioGiorno.setHours(0, 0, 0, 0);
+  const fine = new Date(inizioGiorno.getTime() + (business.ora_chiusura ?? 20) * 3600000);
+
+  const primo = new Date(Math.ceil((adesso.getTime() + margineMs) / margineMs) * margineMs);
+
+  const slots = [];
+  for (let t = primo; t < fine; t = new Date(t.getTime() + margineMs)) {
+    slots.push(t);
+  }
+  return slots;
+};
 
 // Chiave localStorage per il numero preso da un cliente su una data
 // attivita' su QUESTO dispositivo -- permette di ritrovarlo dopo un
@@ -190,6 +214,12 @@ const ticketSalvatoValido = (businessId, currentAttuale) => {
   localStorage.removeItem(chiaveTicket(businessId));
   return null;
 };
+
+// Stessa logica di persistenza di chiaveTicket, ma per una prenotazione
+// ancora "in attesa" (senza ancora un numero vero): senza questo, un
+// reload o una scheda scaricata in background farebbe perdere il
+// collegamento con la prenotazione gia' fatta.
+const chiavePrenotazione = (businessId) => `prossimo_prenotazione_${businessId}`;
 
 // "Ding-dong" sintetizzato via Web Audio API quando arriva il turno del
 // cliente: niente file audio da scaricare. Riusa l'AudioContext passato
@@ -602,6 +632,11 @@ const handleLogout = async () => {
   // provider SMS a pagamento gia' configurato dal titolare, non va
   // acceso finche' lui non lo fa esplicitamente.
   const [formSmsAbilitato, setFormSmsAbilitato] = useState(false);
+  // Anche questo di default disattivato: cambia il funzionamento della
+  // coda per i clienti (numeri assegnati in automatico ad un orario),
+  // va attivato esplicitamente invece di apparire di sorpresa.
+  const [formPrenotazioniAbilitato, setFormPrenotazioniAbilitato] = useState(false);
+  const [formSlotPrenotazioneMinuti, setFormSlotPrenotazioneMinuti] = useState(30);
   const [errore, setErrore] = useState("");
 
   const toggleGiornoApertura = (jsDay) => {
@@ -759,6 +794,106 @@ const handleLogout = async () => {
       alert("Non è stato possibile attivare l'avviso via SMS. Riprova.");
     }
   };
+
+  // Prenotazione di una fascia oraria: alternativa a "prendi numero" sul
+  // posto, disponibile solo se il titolare l'ha attivata
+  // (activeBusiness.prenotazioni_abilitato). "prenotazione" e' l'unica
+  // fonte di verita' per lo stato "in attesa che arrivi l'orario"; una
+  // volta che il numero viene assegnato si trasforma in un myTicket vero
+  // e sparisce, come un ticket preso di persona.
+  const [prenotazione, setPrenotazione] = useState(null);
+  const [mostraSceltaSlot, setMostraSceltaSlot] = useState(false);
+  const [slotScelto, setSlotScelto] = useState(null);
+  const [telefonoPrenotazione, setTelefonoPrenotazione] = useState("");
+  const [prenotandoInCorso, setPrenotandoInCorso] = useState(false);
+
+  // Ripristina una prenotazione salvata su questo dispositivo per
+  // l'attivita' data (stessa idea di ticketSalvatoValido, ma per una
+  // prenotazione ancora "in attesa" senza gia' un numero). Ritorna true
+  // se c'era qualcosa da gestire, cosi' il chiamante non ne prende
+  // (o assegna) una nuova al suo posto.
+  const recuperaPrenotazioneSalvata = async (businessId) => {
+    const salvata = localStorage.getItem(chiavePrenotazione(businessId));
+    if (!salvata) return false;
+    let id;
+    try {
+      ({ id } = JSON.parse(salvata));
+    } catch {
+      localStorage.removeItem(chiavePrenotazione(businessId));
+      return false;
+    }
+    try {
+      const stato = await statoPrenotazione(id);
+      if (!stato || stato.stato === "annullata") {
+        localStorage.removeItem(chiavePrenotazione(businessId));
+        return false;
+      }
+      if (stato.stato === "in_coda" && stato.ticket_number != null) {
+        localStorage.removeItem(chiavePrenotazione(businessId));
+        setMyTicket(stato.ticket_number);
+        return true;
+      }
+      setPrenotazione({ id, slotStart: new Date(stato.slot_start) });
+      return true;
+    } catch (e) {
+      console.error("Recupero prenotazione non riuscito:", e);
+      return false;
+    }
+  };
+
+  const confermaPrenotazione = async () => {
+    if (!slotScelto || !activeBusiness) return;
+    setPrenotandoInCorso(true);
+    try {
+      const id = await creaPrenotazione(activeBusiness.id, slotScelto, telefonoPrenotazione.trim());
+      localStorage.setItem(chiavePrenotazione(activeBusiness.id), JSON.stringify({ id }));
+      setPrenotazione({ id, slotStart: slotScelto });
+      setMostraSceltaSlot(false);
+    } catch (e) {
+      console.error("Prenotazione non riuscita:", e);
+      alert("Non è stato possibile completare la prenotazione. Riprova.");
+    } finally {
+      setPrenotandoInCorso(false);
+    }
+  };
+
+  const annullaPrenotazioneCliente = async () => {
+    if (!prenotazione) return;
+    try {
+      await annullaPrenotazione(prenotazione.id);
+    } catch (e) {
+      console.error("Annullamento prenotazione non riuscito:", e);
+    }
+    if (activeBusiness?.id) localStorage.removeItem(chiavePrenotazione(activeBusiness.id));
+    setPrenotazione(null);
+  };
+
+  // Controllo periodico ogni 5s mentre si e' in attesa dell'orario
+  // prenotato: e' anche il meccanismo che fa scattare l'assegnazione del
+  // numero lato server (vedi stato_prenotazione nella migrazione), quindi
+  // funziona anche come rete di sicurezza indipendente dal cron job.
+  useEffect(() => {
+    if (!prenotazione) return;
+    const controlla = async () => {
+      try {
+        const stato = await statoPrenotazione(prenotazione.id);
+        if (!stato || stato.stato === "annullata") {
+          if (activeBusiness?.id) localStorage.removeItem(chiavePrenotazione(activeBusiness.id));
+          setPrenotazione(null);
+          return;
+        }
+        if (stato.stato === "in_coda" && stato.ticket_number != null) {
+          if (activeBusiness?.id) localStorage.removeItem(chiavePrenotazione(activeBusiness.id));
+          setMyTicket(stato.ticket_number);
+          setPrenotazione(null);
+        }
+      } catch (e) {
+        console.error("Controllo prenotazione non riuscito:", e);
+      }
+    };
+    const t = setInterval(controlla, 5000);
+    return () => clearInterval(t);
+  }, [prenotazione, activeBusiness?.id]);
 
   useEffect(() => {
     posizioneGiaNotificata.current = false;
@@ -945,6 +1080,12 @@ const handleLogout = async () => {
             return;
           }
 
+          // Anche una prenotazione (fascia oraria) gia' fatta in precedenza
+          // ha la stessa priorita' di un numero gia' preso: non ha senso
+          // farne prendere subito uno nuovo mentre e' gia' in attesa
+          // dell'orario prenotato.
+          if (await recuperaPrenotazioneSalvata(data.id)) return;
+
           // Attivita' chiusa in questo momento: non ha senso far prendere
           // un numero, si mostra invece il messaggio con l'orario di riapertura.
           if (!statoApertura(data, new Date()).aperta) return;
@@ -970,11 +1111,15 @@ const handleLogout = async () => {
         .select("*")
         .eq("id", savedId)
         .single()
-        .then(({ data }) => {
+        .then(async ({ data }) => {
           if (!data) return;
           setActiveBusiness(data);
           const ticketValido = ticketSalvatoValido(data.id, data.current ?? 0);
-          if (ticketValido !== null) setMyTicket(ticketValido);
+          if (ticketValido !== null) {
+            setMyTicket(ticketValido);
+            return;
+          }
+          await recuperaPrenotazioneSalvata(data.id);
         });
     }
   }, []);
@@ -1092,6 +1237,8 @@ const handleLogout = async () => {
     setFormSogliaAttesa(b.soglia_attesa != null ? String(b.soglia_attesa) : "");
     setFormSchermoAbilitato(b.schermo_abilitato ?? true);
     setFormSmsAbilitato(b.sms_abilitato ?? false);
+    setFormPrenotazioniAbilitato(b.prenotazioni_abilitato ?? false);
+    setFormSlotPrenotazioneMinuti(b.slot_prenotazione_minuti ?? 30);
     setAttivitaInModifica(b);
     setVistaProvenienzaModifica(provenienza);
     setRegistered(false);
@@ -1128,6 +1275,8 @@ const handleLogout = async () => {
       soglia_attesa: formSogliaAttesa === "" ? null : Number(formSogliaAttesa),
       schermo_abilitato: formSchermoAbilitato,
       sms_abilitato: formSmsAbilitato,
+      prenotazioni_abilitato: formPrenotazioniAbilitato,
+      slot_prenotazione_minuti: formSlotPrenotazioneMinuti,
     };
 
     if (attivitaInModifica) {
@@ -1185,6 +1334,8 @@ const handleLogout = async () => {
     setFormSogliaAttesa("");
     setFormSchermoAbilitato(true);
     setFormSmsAbilitato(false);
+    setFormPrenotazioniAbilitato(false);
+    setFormSlotPrenotazioneMinuti(30);
     setVistaProvenienzaModifica("operatore");
   };
 
@@ -1726,6 +1877,14 @@ const handleLogout = async () => {
           font-size: 18px;
           padding: 15px 16px;
         }
+        .slot-grid { display: flex; flex-wrap: wrap; gap: 7px; justify-content: center; margin-top: 14px; }
+        .slot-grid .chip {
+          border: 1px solid rgba(22,48,43,0.25);
+          background: transparent;
+          color: #16302B;
+        }
+        .slot-grid .chip.active { background: #C99A3E; color: #16302B; border-color: #C99A3E; }
+        .testo-grande .slot-grid .chip { font-size: 15px; padding: 9px 15px; }
         .field-input::placeholder { color: rgba(159,179,172,0.5); }
         .field-input:focus { outline: none; border-color: #C99A3E; }
 
@@ -2002,6 +2161,62 @@ const handleLogout = async () => {
                 Scansiona il QR code esposto nel locale per prendere il tuo numero.
               </p>
             </div>
+          ) : myTicket === null && prenotazione ? (
+            <div className="ticket" style={{ textAlign: "center" }}>
+              <div className="eyebrow">{activeBusiness.name} — Cassa</div>
+              <div style={{ margin: "18px 0 6px" }}>
+                <CalendarClock size={48} color="#16302B" style={{ margin: "0 auto" }} />
+              </div>
+              <div className="ticket-title">
+                Prenotato per le {formatOrarioSlot(prenotazione.slotStart)}
+              </div>
+              <p className="ticket-msg" style={{ color: "rgba(22,48,43,0.65)", marginTop: 8 }}>
+                A quell'ora ti assegniamo in automatico un numero vero, nella stessa coda di chi si presenta di persona. Puoi anche chiudere questa pagina: basta riaprirla per vedere il tuo numero quando e' pronto.
+              </p>
+              <button className="cta ghost" onClick={annullaPrenotazioneCliente}>
+                <X size={15} /> Annulla prenotazione
+              </button>
+            </div>
+          ) : myTicket === null && mostraSceltaSlot ? (
+            <div className="ticket" style={{ textAlign: "center" }}>
+              <div className="eyebrow">{activeBusiness.name} — Cassa</div>
+              <div className="ticket-title" style={{ marginTop: 10 }}>
+                Scegli una fascia oraria
+              </div>
+              <div className="slot-grid">
+                {generaSlotDisponibili(activeBusiness, oraCorrente).map((slot) => (
+                  <button
+                    key={slot.getTime()}
+                    type="button"
+                    className={"chip" + (slotScelto?.getTime() === slot.getTime() ? " active" : "")}
+                    onClick={() => setSlotScelto(slot)}
+                  >
+                    {formatOrarioSlot(slot)}
+                  </button>
+                ))}
+              </div>
+              {generaSlotDisponibili(activeBusiness, oraCorrente).length === 0 && (
+                <p className="ticket-msg-sm" style={{ color: "rgba(22,48,43,0.5)", marginTop: 10 }}>
+                  Nessuna fascia oraria disponibile per oggi.
+                </p>
+              )}
+              {slotScelto && (
+                <input
+                  type="tel"
+                  className="ticket-field-input"
+                  placeholder="Telefono (facoltativo)"
+                  value={telefonoPrenotazione}
+                  onChange={(e) => setTelefonoPrenotazione(e.target.value)}
+                  style={{ marginTop: 14 }}
+                />
+              )}
+              <button className="cta primary" onClick={confermaPrenotazione} disabled={!slotScelto || prenotandoInCorso}>
+                <CalendarClock size={16} /> Conferma prenotazione
+              </button>
+              <button className="cta ghost" onClick={() => { setMostraSceltaSlot(false); setSlotScelto(null); }}>
+                Annulla
+              </button>
+            </div>
           ) : myTicket === null && statoOrari && !statoOrari.aperta ? (
             <div className="ticket" style={{ textAlign: "center" }}>
               <div className="eyebrow">{activeBusiness.name} — Cassa</div>
@@ -2030,6 +2245,11 @@ const handleLogout = async () => {
               <button className="cta primary" onClick={prendiNumero}>
                 Prendi il tuo numero <ArrowRight size={16} />
               </button>
+              {activeBusiness.prenotazioni_abilitato && (
+                <button className="cta ghost" onClick={() => setMostraSceltaSlot(true)}>
+                  <CalendarClock size={15} /> Prenota una fascia oraria
+                </button>
+              )}
             </div>
           ) : (
             <div className="ticket">
@@ -2719,6 +2939,29 @@ const handleLogout = async () => {
                   <button type="button" className={"chip" + (formSmsAbilitato ? " active" : "")} onClick={() => setFormSmsAbilitato(true)}>Attivo</button>
                   <button type="button" className={"chip" + (!formSmsAbilitato ? " active" : "")} onClick={() => setFormSmsAbilitato(false)}>Disattivato</button>
                 </div>
+
+                <label className="field-label"><Clock size={13} style={{ display: "inline", marginRight: 5, position: "relative", top: -1 }} />Prenotazione fascia oraria</label>
+                <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: -4, marginBottom: 8 }}>
+                  I clienti potranno prenotare un orario piu' tardi nella stessa giornata invece di dover scansionare il QR sul posto: al momento prenotato ricevono in automatico un numero vero, nella stessa coda di chi si presenta di persona.
+                </p>
+                <div className="chip-row">
+                  <button type="button" className={"chip" + (formPrenotazioniAbilitato ? " active" : "")} onClick={() => setFormPrenotazioniAbilitato(true)}>Attivo</button>
+                  <button type="button" className={"chip" + (!formPrenotazioniAbilitato ? " active" : "")} onClick={() => setFormPrenotazioniAbilitato(false)}>Disattivato</button>
+                </div>
+                {formPrenotazioniAbilitato && (
+                  <div className="chip-row" style={{ marginTop: 8 }}>
+                    {[15, 30, 60].map((min) => (
+                      <button
+                        key={min}
+                        type="button"
+                        className={"chip" + (formSlotPrenotazioneMinuti === min ? " active" : "")}
+                        onClick={() => setFormSlotPrenotazioneMinuti(min)}
+                      >
+                        Ogni {min} min
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 <button className="cta primary" onClick={salvaAttivita} disabled={!formName.trim()} style={{ marginTop: 18 }}>
                   {attivitaInModifica ? (
