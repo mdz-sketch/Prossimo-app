@@ -43,6 +43,85 @@ export async function nonPresente(businessId) {
   return data;
 }
 
+// --- Reparti (code multiple all'interno della stessa attivita') -----------
+export async function repartiDiAttivita(businessId) {
+  const { data, error } = await supabase
+    .from("reparti")
+    .select("*")
+    .eq("business_id", businessId)
+    .order("ordine", { ascending: true })
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function creaReparto(businessId, nome) {
+  const { data, error } = await supabase
+    .from("reparti")
+    .insert({ business_id: businessId, nome })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function rinominaReparto(repartoId, nome) {
+  const { error } = await supabase.from("reparti").update({ nome }).eq("id", repartoId);
+  if (error) throw error;
+}
+
+export async function eliminaReparto(repartoId) {
+  const { error } = await supabase.from("reparti").delete().eq("id", repartoId);
+  if (error) throw error;
+}
+
+// --- Cliente/operatore: stesse azioni di sempre, ma per un singolo reparto -
+export async function prendiNumeroReparto(repartoId) {
+  const { data, error } = await supabase.rpc("prendi_numero_reparto", {
+    reparto_id_input: repartoId,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function avanzaReparto(repartoId) {
+  const { data, error } = await supabase.rpc("avanza_numero_reparto", {
+    reparto_id_input: repartoId,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function richiamaReparto(repartoId) {
+  const { data, error } = await supabase.rpc("richiama_numero_reparto", {
+    reparto_id_input: repartoId,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function nonPresenteReparto(repartoId) {
+  const { data, error } = await supabase.rpc("non_presente_reparto", {
+    reparto_id_input: repartoId,
+  });
+  if (error) throw error;
+  return data;
+}
+
+// --- Realtime: iscriviti agli aggiornamenti di un reparto ------------------
+export function ascoltaAggiornamentiReparto(repartoId, callback) {
+  const channel = supabase
+    .channel(`reparto-${repartoId}`)
+    .on(
+      "postgres_changes",
+      { event: "UPDATE", schema: "public", table: "reparti", filter: `id=eq.${repartoId}` },
+      (payload) => callback(payload.new)
+    )
+    .subscribe();
+
+  return () => supabase.removeChannel(channel);
+}
+
 // --- Operatore: chiamata prioritaria (fuori ordine, senza spostare current) ---
 export async function chiamaPrioritario(businessId, numero) {
   const { error } = await supabase.rpc("chiama_prioritario", {

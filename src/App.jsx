@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, BarChart3, MapPin, Tag, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Printer, AlertTriangle, Download, Users, Mail, ShieldCheck, Monitor, Type, MessageSquare, CalendarClock } from "lucide-react";
+import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, BarChart3, MapPin, Tag, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Printer, AlertTriangle, Download, Users, Mail, ShieldCheck, Monitor, Type, MessageSquare, CalendarClock, LayoutGrid, Trash2 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "./lib/supabaseClient";
 import Login from "./components/Login";
@@ -33,6 +33,15 @@ import {
   chiamaPrioritario,
   completaPrioritario,
   annullaPrioritario,
+  repartiDiAttivita,
+  creaReparto,
+  rinominaReparto,
+  eliminaReparto,
+  prendiNumeroReparto,
+  avanzaReparto,
+  richiamaReparto,
+  nonPresenteReparto,
+  ascoltaAggiornamentiReparto,
 } from "./lib/queries";
 import { esportaCsv, esportaPdf, apriQrPdf, condividiQrPdf } from "./lib/export";
 import { sottoscriviPush } from "./lib/push";
@@ -223,6 +232,21 @@ const ticketSalvatoValido = (businessId, currentAttuale) => {
 // reload o una scheda scaricata in background farebbe perdere il
 // collegamento con la prenotazione gia' fatta.
 const chiavePrenotazione = (businessId) => `prossimo_prenotazione_${businessId}`;
+
+// Un'attivita' con reparti (code multiple) ricorda quale reparto il
+// cliente aveva scelto su questo dispositivo, e il numero preso in quel
+// reparto -- stessa idea di chiaveTicket/ticketSalvatoValido, ma
+// scoperta per reparto invece che per l'intera attivita'.
+const chiaveRepartoAttivo = (businessId) => `prossimo_reparto_${businessId}`;
+const chiaveTicketReparto = (repartoId) => `prossimo_ticket_reparto_${repartoId}`;
+const ticketSalvatoValidoReparto = (repartoId, currentAttuale) => {
+  const salvato = localStorage.getItem(chiaveTicketReparto(repartoId));
+  if (!salvato) return null;
+  const numero = parseInt(salvato, 10);
+  if (numero >= currentAttuale) return numero;
+  localStorage.removeItem(chiaveTicketReparto(repartoId));
+  return null;
+};
 
 // "Ding-dong" sintetizzato via Web Audio API quando arriva il turno del
 // cliente: niente file audio da scaricare. Riusa l'AudioContext passato
@@ -482,6 +506,19 @@ const handleLogout = async () => {
   // Viene impostata registrando una nuova attivita' o scegliendo
   // "Gestisci" da un'attivita' esistente nel pannello Admin.
   const [activeBusiness, setActiveBusiness] = useState(null);
+  // Code multiple (reparti/servizi distinti) all'interno della stessa
+  // attivita', es. "Cassa" e "Ritiro ordini": repartiBusiness e' la lista
+  // (vuota per un'attivita' che non li usa -- comportamento invariato),
+  // activeReparto e' quello scelto/in gestione al momento (cliente o
+  // operatore, mai entrambi nella stessa sessione del browser).
+  const [repartiBusiness, setRepartiBusiness] = useState([]);
+  const [activeReparto, setActiveReparto] = useState(null);
+  useEffect(() => {
+    const businessId = activeBusiness?.id;
+    (businessId ? repartiDiAttivita(businessId) : Promise.resolve([]))
+      .then(setRepartiBusiness)
+      .catch(console.error);
+  }, [activeBusiness?.id]);
   // Aggiornato ogni minuto: fa ricalcolare se l'attivita' e' aperta o
   // chiusa anche se il cliente resta con la pagina ferma sullo schermo.
   const [oraCorrente, setOraCorrente] = useState(() => new Date());
@@ -563,10 +600,13 @@ const handleLogout = async () => {
   // salvato (es. cambio di attivita' lato operatore, dove myTicket non
   // c'entra nulla con il cliente).
   useEffect(() => {
-    if (activeBusiness?.id && myTicket !== null) {
+    if (myTicket === null) return;
+    if (activeReparto?.id) {
+      localStorage.setItem(chiaveTicketReparto(activeReparto.id), String(myTicket));
+    } else if (activeBusiness?.id) {
       localStorage.setItem(chiaveTicket(activeBusiness.id), String(myTicket));
     }
-  }, [myTicket, activeBusiness?.id]);
+  }, [myTicket, activeBusiness?.id, activeReparto?.id]);
   const [pulse, setPulse] = useState(false);
   const [servedToday, setServedToday] = useState(0);
   const [skippedToday, setSkippedToday] = useState(0);
@@ -651,22 +691,32 @@ const handleLogout = async () => {
   // Finche' non ci sono ancora dati storici sufficienti (attivita' nuova,
   // nessuno ancora servito oggi), usa una stima prudente invece di "0 min".
   const avgWaitStimata = avgWaitToday > 0 ? avgWaitToday : 3;
-  const current = activeBusiness?.current ?? 0;
-  const lastIssued = activeBusiness?.last_issued ?? 0;
+  // Con un reparto attivo, current/last_issued vivono sulla riga del
+  // reparto invece che su quella dell'attivita': tutto cio' che segue
+  // (posizione, turno, numeri mostrati...) resta invariato perche' legge
+  // solo queste due costanti, non activeBusiness direttamente.
+  const current = activeReparto ? (activeReparto.current ?? 0) : (activeBusiness?.current ?? 0);
+  const lastIssued = activeReparto ? (activeReparto.last_issued ?? 0) : (activeBusiness?.last_issued ?? 0);
   const inCoda = Math.max(lastIssued - current, 0);
   const position = myTicket ? Math.max(myTicket - current - 1, 0) : null;
   // Un numero chiamato con priorita' (fuori ordine, vedi migrazione
   // 20260908020000) e' "il tuo turno" per chi ce l'ha, e resta "gia'
   // servito" per sempre dopo -- anche se "current" non arrivera' mai a
   // quel numero specifico, perche' current non si sposta per le chiamate
-  // prioritarie.
-  const isMyTurn = myTicket !== null && (current === myTicket || activeBusiness?.chiamata_prioritaria === myTicket);
-  const giaServito = myTicket !== null && (current > myTicket || activeBusiness?.ultimo_prioritario_servito === myTicket);
+  // prioritarie. La chiamata prioritaria resta a livello di attivita'
+  // (ambito v1 dei reparti): con un reparto attivo va ignorata, altrimenti
+  // un numero di reparto potrebbe combaciare per puro caso con un numero
+  // prioritario di un contesto diverso.
+  const isMyTurn = myTicket !== null && (current === myTicket || (!activeReparto && activeBusiness?.chiamata_prioritaria === myTicket));
+  const giaServito = myTicket !== null && (current > myTicket || (!activeReparto && activeBusiness?.ultimo_prioritario_servito === myTicket));
   const isNext = myTicket !== null && position === 0 && !isMyTurn && !giaServito;
   // Numeri mostrati all'utente: solo quelli di oggi (current/myTicket sono
-  // contatori cumulativi su tutta la storia dell'attivita').
-  const currentOggi = Math.max(current - baselineOggi, 0);
-  const myTicketOggi = myTicket !== null ? Math.max(myTicket - baselineOggi, 0) : null;
+  // contatori cumulativi su tutta la storia dell'attivita'). Per un
+  // reparto (numerazione piu' piccola e indipendente, ambito v1) si
+  // mostra il numero vero senza sottrazione: baselineOggi e' calcolato
+  // solo a livello di attivita'.
+  const currentOggi = activeReparto ? current : Math.max(current - baselineOggi, 0);
+  const myTicketOggi = myTicket === null ? null : activeReparto ? myTicket : Math.max(myTicket - baselineOggi, 0);
 
   // Avviso coda lunga: attivo se la coda o l'attesa stimata per l'ultimo
   // arrivato superano le soglie impostate dal titolare (opzionali).
@@ -1087,6 +1137,23 @@ const handleLogout = async () => {
           localStorage.setItem("prossimo_active_business_id", data.id);
           setView("cliente");
 
+          // Un'attivita' con reparti (code multiple) non prende un numero
+          // in automatico: bisogna prima scegliere il servizio. Si prova
+          // pero' a ripristinare il reparto e il ticket gia' scelti su
+          // questo dispositivo, come per il flusso senza reparti sotto.
+          const reparti = await repartiDiAttivita(data.id).catch(() => []);
+          setRepartiBusiness(reparti);
+          if (reparti.length > 0) {
+            const repartoSalvatoId = localStorage.getItem(chiaveRepartoAttivo(data.id));
+            const repartoSalvato = reparti.find((r) => r.id === repartoSalvatoId);
+            if (repartoSalvato) {
+              setActiveReparto(repartoSalvato);
+              const ticketValidoReparto = ticketSalvatoValidoReparto(repartoSalvato.id, repartoSalvato.current ?? 0);
+              if (ticketValidoReparto !== null) setMyTicket(ticketValidoReparto);
+            }
+            return;
+          }
+
           // Questo dispositivo ha gia' un numero ancora valido per questa
           // stessa attivita' (es. la pagina si e' ricaricata, o il browser
           // aveva scaricato la scheda in background): si recupera quello
@@ -1135,6 +1202,20 @@ const handleLogout = async () => {
         .then(async ({ data }) => {
           if (!data) return;
           setActiveBusiness(data);
+
+          const reparti = await repartiDiAttivita(data.id).catch(() => []);
+          setRepartiBusiness(reparti);
+          if (reparti.length > 0) {
+            const repartoSalvatoId = localStorage.getItem(chiaveRepartoAttivo(data.id));
+            const repartoSalvato = reparti.find((r) => r.id === repartoSalvatoId);
+            if (repartoSalvato) {
+              setActiveReparto(repartoSalvato);
+              const ticketValidoReparto = ticketSalvatoValidoReparto(repartoSalvato.id, repartoSalvato.current ?? 0);
+              if (ticketValidoReparto !== null) setMyTicket(ticketValidoReparto);
+            }
+            return;
+          }
+
           const ticketValido = ticketSalvatoValido(data.id, data.current ?? 0);
           if (ticketValido !== null) {
             setMyTicket(ticketValido);
@@ -1188,10 +1269,25 @@ const handleLogout = async () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeBusiness?.id]);
 
+  // Stessa idea, ma per il reparto scelto/in gestione: current/last_issued
+  // vivono sulla riga del reparto quando ce n'e' uno attivo, non su quella
+  // dell'attivita'.
+  useEffect(() => {
+    if (!activeReparto?.id) return;
+    const cleanup = ascoltaAggiornamentiReparto(activeReparto.id, (nuovo) => {
+      setActiveReparto((r) => (r ? { ...r, ...nuovo } : r));
+    });
+    return cleanup;
+  }, [activeReparto?.id]);
+
   const selezionaAttivita = (b) => {
     setActiveBusiness(b);
     localStorage.setItem("prossimo_active_business_id", b.id);
     setMyTicket(null);
+    // L'operatore riparte sempre dalla scelta del reparto (se l'attivita'
+    // ne ha), non da quello usato l'ultima volta: puo' star coprendo un
+    // reparto diverso oggi.
+    setActiveReparto(null);
     setStatsOffset(0);
   };
 
@@ -1199,25 +1295,57 @@ const handleLogout = async () => {
   const prendiNumero = async () => {
     if (!activeBusiness) return;
     try {
-      const n = await prendiNumeroSupabase(activeBusiness.id);
-      setMyTicket(n);
-      setActiveBusiness((b) => ({ ...b, last_issued: n }));
+      if (activeReparto) {
+        const n = await prendiNumeroReparto(activeReparto.id);
+        setMyTicket(n);
+        setActiveReparto((r) => (r ? { ...r, last_issued: n } : r));
+      } else {
+        const n = await prendiNumeroSupabase(activeBusiness.id);
+        setMyTicket(n);
+        setActiveBusiness((b) => ({ ...b, last_issued: n }));
+      }
     } catch (e) {
       setErrore(e.message);
     }
   };
 
   const annulla = () => {
-    if (activeBusiness?.id) localStorage.removeItem(chiaveTicket(activeBusiness.id));
+    if (activeReparto?.id) localStorage.removeItem(chiaveTicketReparto(activeReparto.id));
+    else if (activeBusiness?.id) localStorage.removeItem(chiaveTicket(activeBusiness.id));
     setMyTicket(null);
+  };
+
+  // Torna alla scelta del reparto (es. per prendere un numero in un altro
+  // servizio della stessa attivita'), senza toccare il ticket eventuale
+  // di un reparto diverso gia' salvato su questo dispositivo.
+  const cambiaReparto = () => {
+    if (activeBusiness?.id) localStorage.removeItem(chiaveRepartoAttivo(activeBusiness.id));
+    setActiveReparto(null);
+    setMyTicket(null);
+  };
+
+  // Il cliente sceglie un reparto dalla lista (attivita' con code multiple):
+  // recupera un ticket gia' preso in quel reparto su questo dispositivo,
+  // se c'e' ancora, senza prenderne subito uno nuovo -- il "Prendi il tuo
+  // numero" del reparto scelto resta un tocco esplicito, come sempre.
+  const selezionaReparto = (reparto) => {
+    if (!activeBusiness) return;
+    localStorage.setItem(chiaveRepartoAttivo(activeBusiness.id), reparto.id);
+    setActiveReparto(reparto);
+    const ticketValido = ticketSalvatoValidoReparto(reparto.id, reparto.current ?? 0);
+    setMyTicket(ticketValido !== null ? ticketValido : null);
   };
 
   // --- Operatore --------------------------------------------------------
   const avanti = async () => {
     if (!activeBusiness) return;
     try {
-      await avantiSupabase(activeBusiness.id);
-      refreshStats(activeBusiness.id);
+      if (activeReparto) {
+        await avanzaReparto(activeReparto.id);
+      } else {
+        await avantiSupabase(activeBusiness.id);
+        refreshStats(activeBusiness.id);
+      }
     } catch (e) {
       setErrore(e.message);
     }
@@ -1226,8 +1354,12 @@ const handleLogout = async () => {
   const richiama = async () => {
     if (!activeBusiness) return;
     try {
-      await richiamaSupabase(activeBusiness.id);
-      refreshStats(activeBusiness.id);
+      if (activeReparto) {
+        await richiamaReparto(activeReparto.id);
+      } else {
+        await richiamaSupabase(activeBusiness.id);
+        refreshStats(activeBusiness.id);
+      }
     } catch (e) {
       setErrore(e.message);
     }
@@ -1236,8 +1368,12 @@ const handleLogout = async () => {
   const nonPresente = async () => {
     if (!activeBusiness) return;
     try {
-      await nonPresenteSupabase(activeBusiness.id);
-      refreshStats(activeBusiness.id);
+      if (activeReparto) {
+        await nonPresenteReparto(activeReparto.id);
+      } else {
+        await nonPresenteSupabase(activeBusiness.id);
+        refreshStats(activeBusiness.id);
+      }
     } catch (e) {
       setErrore(e.message);
     }
@@ -1246,7 +1382,7 @@ const handleLogout = async () => {
   // Chiamata prioritaria: l'operatore tocca uno dei numeri "in attesa" per
   // farlo passare subito, fuori ordine (es. persona con disabilita').
   const richiediPrioritario = async (numero, numeroOggi) => {
-    if (!activeBusiness) return;
+    if (!activeBusiness || activeReparto) return;
     if (!window.confirm(`Chiamare subito il numero #${numeroOggi} con priorita', fuori ordine?`)) return;
     try {
       await chiamaPrioritario(activeBusiness.id, numero);
@@ -1302,6 +1438,52 @@ const handleLogout = async () => {
     setAttivitaInModifica(null);
     nuovaRegistrazione();
     setView(vistaProvenienzaModifica);
+  };
+
+  // Reparti (code multiple) dell'attivita' in modifica -- lista separata da
+  // repartiBusiness perche' qui si sta modificando attivitaInModifica, non
+  // necessariamente la stessa activeBusiness selezionata altrove.
+  const [repartiInModifica, setRepartiInModifica] = useState([]);
+  const [nuovoRepartoNome, setNuovoRepartoNome] = useState("");
+
+  useEffect(() => {
+    const id = attivitaInModifica?.id;
+    (id ? repartiDiAttivita(id) : Promise.resolve([]))
+      .then(setRepartiInModifica)
+      .catch(console.error);
+  }, [attivitaInModifica?.id]);
+
+  const aggiungiReparto = async () => {
+    if (!nuovoRepartoNome.trim() || !attivitaInModifica) return;
+    try {
+      const r = await creaReparto(attivitaInModifica.id, nuovoRepartoNome.trim());
+      setRepartiInModifica((prev) => [...prev, r]);
+      setNuovoRepartoNome("");
+    } catch (e) {
+      alert("Errore nella creazione del reparto: " + e.message);
+    }
+  };
+
+  const salvaRinominaReparto = async (repartoId, nome) => {
+    if (!nome.trim()) return;
+    try {
+      await rinominaReparto(repartoId, nome.trim());
+    } catch (e) {
+      alert("Errore nel salvataggio: " + e.message);
+    }
+  };
+
+  const rimuoviReparto = async (reparto) => {
+    const conferma = window.confirm(
+      `Eliminare il reparto "${reparto.nome}"? I clienti eventualmente in attesa in questo reparto non riceveranno piu' aggiornamenti.`
+    );
+    if (!conferma) return;
+    try {
+      await eliminaReparto(reparto.id);
+      setRepartiInModifica((prev) => prev.filter((r) => r.id !== reparto.id));
+    } catch (e) {
+      alert("Errore nell'eliminazione: " + e.message);
+    }
   };
 
   const salvaAttivita = async () => {
@@ -2238,6 +2420,20 @@ const handleLogout = async () => {
                 Scansiona il QR code esposto nel locale per prendere il tuo numero.
               </p>
             </div>
+          ) : repartiBusiness.length > 0 && !activeReparto ? (
+            <div className="ticket" style={{ textAlign: "center" }}>
+              <div className="eyebrow">{activeBusiness.name}</div>
+              <div className="ticket-title" style={{ marginTop: 10 }}>
+                Scegli un servizio
+              </div>
+              <div className="slot-grid">
+                {repartiBusiness.map((r) => (
+                  <button key={r.id} type="button" className="chip" onClick={() => selezionaReparto(r)}>
+                    {r.nome}
+                  </button>
+                ))}
+              </div>
+            </div>
           ) : myTicket === null && prenotazione ? (
             <div className="ticket" style={{ textAlign: "center" }}>
               <div className="eyebrow">{activeBusiness.name} — Cassa</div>
@@ -2312,7 +2508,7 @@ const handleLogout = async () => {
             </div>
           ) : myTicket === null ? (
             <div className="ticket" style={{ textAlign: "center" }}>
-              <div className="eyebrow">{activeBusiness.name} — Cassa</div>
+              <div className="eyebrow">{activeBusiness.name} — {activeReparto ? activeReparto.nome : "Cassa"}</div>
               <div style={{ margin: "18px 0 6px" }}>
                 <QrCode size={64} color="#16302B" style={{ margin: "0 auto" }} />
               </div>
@@ -2322,15 +2518,20 @@ const handleLogout = async () => {
               <button className="cta primary" onClick={prendiNumero}>
                 Prendi il tuo numero <ArrowRight size={16} />
               </button>
-              {activeBusiness.prenotazioni_abilitato && (
+              {!activeReparto && activeBusiness.prenotazioni_abilitato && (
                 <button className="cta ghost" onClick={() => setMostraSceltaSlot(true)}>
                   <CalendarClock size={15} /> Prenota una fascia oraria
+                </button>
+              )}
+              {activeReparto && (
+                <button className="cta ghost" onClick={cambiaReparto}>
+                  <LayoutGrid size={15} /> Cambia servizio
                 </button>
               )}
             </div>
           ) : (
             <div className="ticket">
-              <div className="eyebrow">{activeBusiness.name} — Cassa</div>
+              <div className="eyebrow">{activeBusiness.name} — {activeReparto ? activeReparto.nome : "Cassa"}</div>
               <div style={{ marginTop: 14 }}>
                 <div className="status-label" style={{ marginBottom: 6 }}>Il tuo numero</div>
                 <FlapNumber value={myTicketOggi} size="lg" />
@@ -2374,7 +2575,7 @@ const handleLogout = async () => {
                   <Bell size={15} /> Avvisami quando manca poco
                 </button>
               )}
-              {!giaServito && activeBusiness.sms_abilitato && (
+              {!giaServito && !activeReparto && activeBusiness.sms_abilitato && (
                 smsAttivo ? (
                   <p className="ticket-msg-sm" style={{ color: "rgba(22,48,43,0.65)", marginTop: 12, textAlign: "center" }}>
                     <MessageSquare size={13} style={{ display: "inline", marginRight: 4, position: "relative", top: -1 }} />
@@ -2398,6 +2599,11 @@ const handleLogout = async () => {
               <button className="cta ghost" onClick={annulla}>
                 <X size={15} /> Annulla prenotazione
               </button>
+              {activeReparto && (
+                <button className="cta ghost" onClick={cambiaReparto}>
+                  <LayoutGrid size={15} /> Cambia servizio
+                </button>
+              )}
             </div>
           )}
           {activeBusiness && (
@@ -2533,123 +2739,155 @@ const handleLogout = async () => {
                   </div>
                 </div>
               </div>
-              <div className="board-label">{activeBusiness.name} — Ora in servizio</div>
-              <FlapNumber value={currentOggi} size="lg" />
-
-              {activeBusiness.chiamata_prioritaria != null && (
-                <div className="turn-banner" style={{ background: "#C99A3E", color: "#16302B", flexDirection: "column", alignItems: "stretch", gap: 10 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <Bell size={20} />
-                    Chiamata prioritaria: #{activeBusiness.chiamata_prioritaria - baselineOggi}
-                  </div>
-                  <div className="op-actions">
-                    <button className="cta dark" onClick={confermaPrioritarioServito}>
-                      <CheckCircle2 size={16} /> Servito
+              {repartiBusiness.length > 0 && (
+                <div className="chip-row" style={{ marginBottom: 16 }}>
+                  {repartiBusiness.map((r) => (
+                    <button
+                      key={r.id}
+                      type="button"
+                      className={"chip" + (activeReparto?.id === r.id ? " active" : "")}
+                      onClick={() => setActiveReparto(r)}
+                    >
+                      {r.nome}
                     </button>
-                    <button className="cta" style={{ margin: 0, background: "transparent", color: "#16302B", border: "1px solid rgba(22,48,43,0.35)" }} onClick={annullaChiamataPrioritaria}>
-                      <X size={16} /> Annulla
-                    </button>
-                  </div>
+                  ))}
                 </div>
               )}
 
-              {allertaCodaLunga && (
-                <div className="turn-banner" style={{ background: "#B7472A", color: "#F1ECDA" }}>
-                  <AlertTriangle size={20} />
-                  <div>
-                    Coda lunga:{" "}
-                    {sogliaCodaSuperata && `${inCoda} persone in coda (soglia: ${activeBusiness.soglia_coda})`}
-                    {sogliaCodaSuperata && sogliaAttesaSuperata && " · "}
-                    {sogliaAttesaSuperata && `attesa stimata ~${attesaStimataCoda} min (soglia: ${activeBusiness.soglia_attesa} min)`}
-                  </div>
-                </div>
-              )}
-
-              {(activeBusiness.soglia_coda != null || activeBusiness.soglia_attesa != null) && !notificheAttive && (
-                <button className="cta ghost" style={{ fontSize: 12, padding: "8px 10px" }} onClick={attivaNotificheBrowser}>
-                  <Bell size={13} /> Attiva notifiche browser per la coda lunga
-                </button>
-              )}
-
-              <div className="op-actions">
-                <button className="cta primary" onClick={avanti} disabled={inCoda === 0}>
-                  <ArrowRight size={16} /> Avanti
-                </button>
-                <button className="cta dark" onClick={richiama} disabled={current === 0} title="Torna al numero precedente">
-                  <RotateCcw size={16} /> Richiama
-                </button>
-                <button className="cta dark" onClick={nonPresente} disabled={inCoda === 0} title="Il cliente non si e' presentato">
-                  <SkipForward size={16} /> Assente
-                </button>
-              </div>
-
-              <div className="stat-grid">
-                <div className="stat-box">
-                  <div className="stat-num">{inCoda}</div>
-                  <div className="stat-lbl">In coda</div>
-                </div>
-                <div className="stat-box">
-                  <div className="stat-num">{servedToday}</div>
-                  <div className="stat-lbl">Serviti oggi</div>
-                </div>
-                <div className="stat-box">
-                  <div className="stat-num">{avgWaitToday}m</div>
-                  <div className="stat-lbl">Attesa media</div>
-                </div>
-                <div className="stat-box">
-                  <div className="stat-num" style={{ color: "#B7472A" }}>{skippedToday}</div>
-                  <div className="stat-lbl">Non presenti ({percentualeNonPresenti(servedToday, skippedToday)}%)</div>
-                </div>
-              </div>
-
-              <div className="stats-divider" style={{ marginTop: 18 }} />
-
-              <div className="board-label">In attesa</div>
-              <div className="queue-strip">
-                {Array.from({ length: inCoda }).map((_, i) => (
-                  <button
-                    type="button"
-                    className="queue-chip queue-chip-clickable"
-                    key={i}
-                    disabled={activeBusiness.chiamata_prioritaria != null}
-                    onClick={() => richiediPrioritario(current + i + 1, currentOggi + i + 1)}
-                    title="Chiama con priorita', fuori ordine"
-                  >
-                    #{currentOggi + i + 1}
-                  </button>
-                ))}
-                {inCoda === 0 && <span style={{ fontSize: 13, color: "#9FB3AC" }}>Nessuno in coda al momento.</span>}
-              </div>
-              {inCoda > 0 && (
-                <p style={{ fontSize: 11, color: "#9FB3AC", marginTop: 6 }}>
-                  Tocca un numero per chiamarlo subito con priorita', fuori ordine.
+              {repartiBusiness.length > 0 && !activeReparto ? (
+                <p style={{ fontSize: 13, color: "#9FB3AC" }}>
+                  Scegli un reparto qui sopra per iniziare a gestirlo.
                 </p>
+              ) : (
+                <>
+                  <div className="board-label">
+                    {activeBusiness.name} — {activeReparto ? activeReparto.nome : "Ora in servizio"}
+                  </div>
+                  <FlapNumber value={currentOggi} size="lg" />
+
+                  {!activeReparto && activeBusiness.chiamata_prioritaria != null && (
+                    <div className="turn-banner" style={{ background: "#C99A3E", color: "#16302B", flexDirection: "column", alignItems: "stretch", gap: 10 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <Bell size={20} />
+                        Chiamata prioritaria: #{activeBusiness.chiamata_prioritaria - baselineOggi}
+                      </div>
+                      <div className="op-actions">
+                        <button className="cta dark" onClick={confermaPrioritarioServito}>
+                          <CheckCircle2 size={16} /> Servito
+                        </button>
+                        <button className="cta" style={{ margin: 0, background: "transparent", color: "#16302B", border: "1px solid rgba(22,48,43,0.35)" }} onClick={annullaChiamataPrioritaria}>
+                          <X size={16} /> Annulla
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {allertaCodaLunga && (
+                    <div className="turn-banner" style={{ background: "#B7472A", color: "#F1ECDA" }}>
+                      <AlertTriangle size={20} />
+                      <div>
+                        Coda lunga:{" "}
+                        {sogliaCodaSuperata && `${inCoda} persone in coda (soglia: ${activeBusiness.soglia_coda})`}
+                        {sogliaCodaSuperata && sogliaAttesaSuperata && " · "}
+                        {sogliaAttesaSuperata && `attesa stimata ~${attesaStimataCoda} min (soglia: ${activeBusiness.soglia_attesa} min)`}
+                      </div>
+                    </div>
+                  )}
+
+                  {(activeBusiness.soglia_coda != null || activeBusiness.soglia_attesa != null) && !notificheAttive && (
+                    <button className="cta ghost" style={{ fontSize: 12, padding: "8px 10px" }} onClick={attivaNotificheBrowser}>
+                      <Bell size={13} /> Attiva notifiche browser per la coda lunga
+                    </button>
+                  )}
+
+                  <div className="op-actions">
+                    <button className="cta primary" onClick={avanti} disabled={inCoda === 0}>
+                      <ArrowRight size={16} /> Avanti
+                    </button>
+                    <button className="cta dark" onClick={richiama} disabled={current === 0} title="Torna al numero precedente">
+                      <RotateCcw size={16} /> Richiama
+                    </button>
+                    <button className="cta dark" onClick={nonPresente} disabled={inCoda === 0} title="Il cliente non si e' presentato">
+                      <SkipForward size={16} /> Assente
+                    </button>
+                  </div>
+
+                  {!activeReparto && (
+                    <>
+                      <div className="stat-grid">
+                        <div className="stat-box">
+                          <div className="stat-num">{inCoda}</div>
+                          <div className="stat-lbl">In coda</div>
+                        </div>
+                        <div className="stat-box">
+                          <div className="stat-num">{servedToday}</div>
+                          <div className="stat-lbl">Serviti oggi</div>
+                        </div>
+                        <div className="stat-box">
+                          <div className="stat-num">{avgWaitToday}m</div>
+                          <div className="stat-lbl">Attesa media</div>
+                        </div>
+                        <div className="stat-box">
+                          <div className="stat-num" style={{ color: "#B7472A" }}>{skippedToday}</div>
+                          <div className="stat-lbl">Non presenti ({percentualeNonPresenti(servedToday, skippedToday)}%)</div>
+                        </div>
+                      </div>
+                      <div className="stats-divider" style={{ marginTop: 18 }} />
+                    </>
+                  )}
+
+                  <div className="board-label" style={activeReparto ? { marginTop: 18 } : undefined}>In attesa</div>
+                  <div className="queue-strip">
+                    {Array.from({ length: inCoda }).map((_, i) => (
+                      <button
+                        type="button"
+                        className="queue-chip queue-chip-clickable"
+                        key={i}
+                        disabled={!!activeReparto || activeBusiness.chiamata_prioritaria != null}
+                        onClick={() => richiediPrioritario(current + i + 1, currentOggi + i + 1)}
+                        title="Chiama con priorita', fuori ordine"
+                      >
+                        #{currentOggi + i + 1}
+                      </button>
+                    ))}
+                    {inCoda === 0 && <span style={{ fontSize: 13, color: "#9FB3AC" }}>Nessuno in coda al momento.</span>}
+                  </div>
+                  {!activeReparto && inCoda > 0 && (
+                    <p style={{ fontSize: 11, color: "#9FB3AC", marginTop: 6 }}>
+                      Tocca un numero per chiamarlo subito con priorita', fuori ordine.
+                    </p>
+                  )}
+
+                  {!activeReparto && (
+                    <>
+                      <div className="stats-divider" />
+
+                      <div className="board-label"><BarChart3 size={13} style={{ display: "inline", marginRight: 6, position: "relative", top: -1 }} />Andamento oggi — persone</div>
+                      <MiniBarChart
+                        labels={andamentoGiorno.labels}
+                        series={[
+                          { name: "Serviti", data: andamentoGiorno.serviti, color: "#C99A3E" },
+                          { name: "Non presentati", data: andamentoGiorno.nonPresentati, color: "#B7472A" },
+                        ]}
+                      />
+                      <p style={{ fontSize: 11, color: "#9FB3AC", marginTop: 10, textAlign: "center" }}>
+                        Per fascia oraria di oggi
+                      </p>
+
+                      <div className="board-label" style={{ marginTop: 18 }}>Andamento oggi — attesa media (min)</div>
+                      <MiniBarChart
+                        labels={andamentoGiorno.labels}
+                        series={[
+                          { name: "Attesa media (min)", data: andamentoGiorno.attesaMedia, color: "#5C87A6" },
+                        ]}
+                      />
+                      <p style={{ fontSize: 11, color: "#9FB3AC", marginTop: 10, textAlign: "center" }}>
+                        Per fascia oraria di oggi
+                      </p>
+                    </>
+                  )}
+                </>
               )}
-
-              <div className="stats-divider" />
-
-              <div className="board-label"><BarChart3 size={13} style={{ display: "inline", marginRight: 6, position: "relative", top: -1 }} />Andamento oggi — persone</div>
-              <MiniBarChart
-                labels={andamentoGiorno.labels}
-                series={[
-                  { name: "Serviti", data: andamentoGiorno.serviti, color: "#C99A3E" },
-                  { name: "Non presentati", data: andamentoGiorno.nonPresentati, color: "#B7472A" },
-                ]}
-              />
-              <p style={{ fontSize: 11, color: "#9FB3AC", marginTop: 10, textAlign: "center" }}>
-                Per fascia oraria di oggi
-              </p>
-
-              <div className="board-label" style={{ marginTop: 18 }}>Andamento oggi — attesa media (min)</div>
-              <MiniBarChart
-                labels={andamentoGiorno.labels}
-                series={[
-                  { name: "Attesa media (min)", data: andamentoGiorno.attesaMedia, color: "#5C87A6" },
-                ]}
-              />
-              <p style={{ fontSize: 11, color: "#9FB3AC", marginTop: 10, textAlign: "center" }}>
-                Per fascia oraria di oggi
-              </p>
             </div>
           )
         ) : view === "admin" ? (
@@ -3069,6 +3307,57 @@ const handleLogout = async () => {
                       </button>
                     ))}
                   </div>
+                )}
+
+                {attivitaInModifica && (
+                  <>
+                    <label className="field-label"><LayoutGrid size={13} style={{ display: "inline", marginRight: 5, position: "relative", top: -1 }} />Reparti (code multiple)</label>
+                    <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: -4, marginBottom: 8 }}>
+                      Servizi distinti con numerazione indipendente (es. "Cassa" e "Ritiro ordini"). Senza reparti l'attivita' continua a funzionare con un'unica coda, come oggi. Prenotazione fascia oraria, SMS e chiamata prioritaria restano per ora legati all'attivita' nel suo insieme, non al singolo reparto.
+                    </p>
+                    {repartiInModifica.map((r) => (
+                      <div key={r.id} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                        <input
+                          className="field-input"
+                          style={{ flex: 1 }}
+                          value={r.nome}
+                          onChange={(e) => {
+                            const nuovoNome = e.target.value;
+                            setRepartiInModifica((prev) => prev.map((x) => (x.id === r.id ? { ...x, nome: nuovoNome } : x)));
+                          }}
+                          onBlur={(e) => salvaRinominaReparto(r.id, e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          className="cta"
+                          style={{ margin: 0, width: "auto", padding: "0 14px", background: "transparent", color: "#B7472A", border: "1px solid rgba(183,71,42,0.4)" }}
+                          onClick={() => rimuoviReparto(r)}
+                          title="Elimina reparto"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    ))}
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <input
+                        className="field-input"
+                        style={{ flex: 1 }}
+                        placeholder="Nome del nuovo reparto"
+                        value={nuovoRepartoNome}
+                        onChange={(e) => setNuovoRepartoNome(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="cta dark"
+                        style={{ margin: 0, width: "auto", padding: "0 14px" }}
+                        onClick={aggiungiReparto}
+                        disabled={!nuovoRepartoNome.trim()}
+                        title="Aggiungi reparto"
+                      >
+                        <Plus size={15} />
+                      </button>
+                    </div>
+                  </>
                 )}
 
                 <button className="cta primary" onClick={salvaAttivita} disabled={!formName.trim()} style={{ marginTop: 18 }}>
