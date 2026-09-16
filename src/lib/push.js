@@ -18,8 +18,11 @@ function urlBase64ToUint8Array(base64String) {
 }
 
 // businessId + (userId oppure ticketNumber, mai entrambi): vedi il vincolo
-// push_subscriptions_tipo_valido nella migration.
-export async function sottoscriviPush({ businessId, userId, ticketNumber }) {
+// push_subscriptions_tipo_valido nella migration. repartoId (opzionale):
+// per un cliente in coda su un reparto specifico, distingue la sua
+// sottoscrizione da quella di un altro reparto/cliente con lo stesso
+// numero di ticket (ogni reparto ha la propria numerazione indipendente).
+export async function sottoscriviPush({ businessId, userId, ticketNumber, repartoId }) {
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
     throw new Error("Il tuo browser non supporta le notifiche push.");
   }
@@ -42,11 +45,12 @@ export async function sottoscriviPush({ businessId, userId, ticketNumber }) {
       business_id: businessId,
       user_id: userId ?? null,
       ticket_number: ticketNumber ?? null,
+      reparto_id: repartoId ?? null,
       endpoint,
       p256dh: keys.p256dh,
       auth: keys.auth,
     },
-    { onConflict: "endpoint,business_id,user_id,ticket_number" }
+    { onConflict: "endpoint,business_id,user_id,ticket_number,reparto_id" }
   );
   if (error) throw error;
 }

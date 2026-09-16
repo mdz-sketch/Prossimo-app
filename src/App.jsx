@@ -821,7 +821,7 @@ const handleLogout = async () => {
       // (se l'app e' installata come PWA -- su iOS serve l'installazione
       // anche solo per ricevere il push mentre e' in background).
       try {
-        await sottoscriviPush({ businessId: activeBusiness.id, ticketNumber: myTicket });
+        await sottoscriviPush({ businessId: activeBusiness.id, ticketNumber: myTicket, repartoId: activeReparto?.id ?? null });
       } catch (e) {
         console.error("Sottoscrizione push non riuscita:", e);
       }
@@ -2845,7 +2845,7 @@ const handleLogout = async () => {
                         key={i}
                         disabled={!!activeReparto || activeBusiness.chiamata_prioritaria != null}
                         onClick={() => richiediPrioritario(current + i + 1, currentOggi + i + 1)}
-                        title="Chiama con priorita', fuori ordine"
+                        title={activeReparto ? undefined : "Chiama con priorita', fuori ordine"}
                       >
                         #{currentOggi + i + 1}
                       </button>
@@ -3275,6 +3275,11 @@ const handleLogout = async () => {
                       Copia link schermo
                     </button>
                   </>
+                )}
+                {formSchermoAbilitato && repartiInModifica.length > 0 && (
+                  <p style={{ fontSize: 11.5, color: "#C99A3E", marginTop: 8 }}>
+                    Con i reparti attivi lo schermo mostra ancora il numero dell'attivita' nel suo insieme, non aggiornato dai reparti: per ora resta fermo. Aggiornamento per reparto in arrivo.
+                  </p>
                 )}
 
                 <label className="field-label"><MessageSquare size={13} style={{ display: "inline", marginRight: 5, position: "relative", top: -1 }} />Avviso via SMS ai clienti</label>
