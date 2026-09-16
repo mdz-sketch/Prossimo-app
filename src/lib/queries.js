@@ -420,6 +420,49 @@ export async function statistichePerOperatore(businessId, periodo, offset = 0) {
   return data;
 }
 
+// --- Feedback post-servizio -------------------------------------------
+// Il cliente lascia una valutazione 1-5 (e un commento opzionale, in
+// genere raccolto solo per le valutazioni basse: vedi src/App.jsx) dopo
+// essere stato servito. reparto_id e' opzionale: null per un'attivita'
+// senza reparti configurati.
+export async function lasciaFeedback({ businessId, ticketNumber, repartoId, valutazione, commento }) {
+  const { error } = await supabase.from("feedback").insert({
+    business_id: businessId,
+    reparto_id: repartoId ?? null,
+    ticket_number: ticketNumber ?? null,
+    valutazione,
+    commento: commento?.trim() || null,
+  });
+  if (error) throw error;
+}
+
+// Riepilogo feedback per il titolare/staff, per periodo (stesso periodo
+// usato per le altre statistiche): media, conteggio, e i commenti
+// lasciati (solo le righe che ne hanno uno, piu' recenti prima).
+export async function feedbackPerAttivita(businessId, periodo, offset = 0) {
+  const from = dataInizioPeriodo(periodo, offset).toISOString();
+  const to = dataFinePeriodo(periodo, offset).toISOString();
+  const { data, error } = await supabase
+    .from("feedback")
+    .select("valutazione, commento, created_at")
+    .eq("business_id", businessId)
+    .gte("created_at", from)
+    .lt("created_at", to)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+
+  const righe = data || [];
+  const media = righe.length > 0
+    ? righe.reduce((somma, r) => somma + r.valutazione, 0) / righe.length
+    : null;
+
+  return {
+    media,
+    conteggio: righe.length,
+    commenti: righe.filter((r) => r.commento),
+  };
+}
+
 export async function eliminaAttivita(businessId) {
   const { error } = await supabase
     .from("businesses")
