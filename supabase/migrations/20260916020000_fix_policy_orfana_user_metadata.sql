@@ -1,0 +1,23 @@
+-- Fix di sicurezza critico, trovato dal linter di sicurezza di Supabase
+-- (get_advisors) durante il deploy di 20260916010000, non collegato ad
+-- essa: su "businesses" esisteva una policy DELETE orfana, mai presente
+-- in nessun file di migrazione di questo repo (creata a mano, fuori dal
+-- flusso migrazioni, probabilmente un residuo di un primo esperimento
+-- prima che il progetto passasse a app_metadata per il ruolo admin) --
+-- "L'admin elimina qualsiasi attività" -- che verificava
+-- auth.jwt() -> 'user_metadata' ->> 'role' = 'admin'.
+--
+-- user_metadata (a differenza di app_metadata) e' modificabile dal
+-- client con supabase.auth.updateUser({ data: { role: 'admin' } }): un
+-- QUALSIASI utente registrato poteva quindi auto-assegnarsi il ruolo
+-- admin lato JWT e cancellare l'attivita' di chiunque tramite questa
+-- policy -- privilege escalation completa, sfruttabile dal browser senza
+-- alcun accesso particolare.
+--
+-- La policy corretta e voluta esiste gia' (creata in
+-- 20260807000000_ruoli_admin_e_staff.sql): "admin elimina qualsiasi
+-- attivita'", basata su app_metadata (scrivibile solo dal service role,
+-- mai dal client). Rimuovere la policy orfana non toglie nessuna
+-- funzionalita' agli admin veri: restano protetti dalla policy corretta.
+
+drop policy if exists "L'admin elimina qualsiasi attività" on businesses;

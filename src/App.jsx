@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, BarChart3, MapPin, Tag, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Printer, AlertTriangle, Download, Users, Mail, ShieldCheck, Monitor, Type, MessageSquare, CalendarClock, LayoutGrid, Trash2 } from "lucide-react";
+import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, BarChart3, MapPin, Tag, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Printer, AlertTriangle, Download, Users, Mail, ShieldCheck, Monitor, Type, MessageSquare, CalendarClock, LayoutGrid, Trash2, Star } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "./lib/supabaseClient";
 import Login from "./components/Login";
@@ -42,6 +42,8 @@ import {
   richiamaReparto,
   nonPresenteReparto,
   ascoltaAggiornamentiReparto,
+  lasciaFeedback,
+  feedbackPerAttivita,
 } from "./lib/queries";
 import { esportaCsv, esportaPdf, apriQrPdf, condividiQrPdf } from "./lib/export";
 import { sottoscriviPush } from "./lib/push";
@@ -616,6 +618,7 @@ const handleLogout = async () => {
   const [statsData, setStatsData] = useState({ serviti: 0, nonPresentati: 0, attesaMedia: 0 });
   const [statsDataPrecedente, setStatsDataPrecedente] = useState({ serviti: 0, nonPresentati: 0, attesaMedia: 0 });
   const [statsPerOperatore, setStatsPerOperatore] = useState([]);
+  const [statsFeedback, setStatsFeedback] = useState({ media: null, conteggio: 0, commenti: [] });
   const [avgWaitToday, setAvgWaitToday] = useState(0);
   const andamentoVuoto = { labels: ORE_GIORNO, serviti: ORE_GIORNO.map(() => 0), nonPresentati: ORE_GIORNO.map(() => 0), attesaMedia: ORE_GIORNO.map(() => 0) };
   const [andamentoGiorno, setAndamentoGiorno] = useState(andamentoVuoto);
@@ -646,6 +649,7 @@ const handleLogout = async () => {
       activeBusiness.ora_chiusura
     ).then(setAndamentoStats).catch(console.error);
     statistichePerOperatore(activeBusiness.id, statsPeriodPage, statsOffset).then(setStatsPerOperatore).catch(console.error);
+    feedbackPerAttivita(activeBusiness.id, statsPeriodPage, statsOffset).then(setStatsFeedback).catch(console.error);
   }, [view, activeBusiness?.id, activeBusiness?.ora_apertura, activeBusiness?.ora_chiusura, statsPeriodPage, statsOffset]);
 
   const [registered, setRegistered] = useState(false);
@@ -675,11 +679,18 @@ const handleLogout = async () => {
   // provider SMS a pagamento gia' configurato dal titolare, non va
   // acceso finche' lui non lo fa esplicitamente.
   const [formSmsAbilitato, setFormSmsAbilitato] = useState(false);
+  // Stesso motivo/default di formSmsAbilitato: richiede un WhatsApp
+  // Sender configurato su Twilio (in test, il Sandbox).
+  const [formWhatsappAbilitato, setFormWhatsappAbilitato] = useState(false);
   // Anche questo di default disattivato: cambia il funzionamento della
   // coda per i clienti (numeri assegnati in automatico ad un orario),
   // va attivato esplicitamente invece di apparire di sorpresa.
   const [formPrenotazioniAbilitato, setFormPrenotazioniAbilitato] = useState(false);
   const [formSlotPrenotazioneMinuti, setFormSlotPrenotazioneMinuti] = useState(30);
+  // Anche questo di default disattivato, stesso motivo di SMS/prenotazioni:
+  // e' una richiesta in piu' al cliente appena servito, va scelta apposta.
+  const [formFeedbackAbilitato, setFormFeedbackAbilitato] = useState(false);
+  const [formGoogleReviewUrl, setFormGoogleReviewUrl] = useState("");
   const [errore, setErrore] = useState("");
 
   const toggleGiornoApertura = (jsDay) => {
@@ -821,35 +832,74 @@ const handleLogout = async () => {
       // (se l'app e' installata come PWA -- su iOS serve l'installazione
       // anche solo per ricevere il push mentre e' in background).
       try {
-        await sottoscriviPush({ businessId: activeBusiness.id, ticketNumber: myTicket });
+        await sottoscriviPush({ businessId: activeBusiness.id, ticketNumber: myTicket, repartoId: activeReparto?.id ?? null });
       } catch (e) {
         console.error("Sottoscrizione push non riuscita:", e);
       }
     }
   };
 
-  // Avviso via SMS: alternativa alla notifica push per chi non vuole
-  // tenere la scheda del browser aperta o concedere permessi di notifica
-  // -- funziona su qualsiasi telefono, disponibile solo se il titolare
-  // l'ha attivata (activeBusiness.sms_abilitato). "smsTicket" (invece di
-  // un booleano) tiene traccia di PER QUALE ticket e' stata attivata:
-  // cosi' smsAttivo si "resetta" da solo quando myTicket cambia, senza
-  // bisogno di un effect dedicato solo a reimpostare lo stato.
+  // Avviso via SMS o WhatsApp: alternativa alla notifica push per chi non
+  // vuole tenere la scheda del browser aperta o concedere permessi di
+  // notifica -- funziona su qualsiasi telefono, disponibile solo se il
+  // titolare ha attivato almeno uno dei due canali (activeBusiness.
+  // sms_abilitato / whatsapp_abilitato). "smsTicket" (invece di un
+  // booleano) tiene traccia di PER QUALE ticket e' stata attivata: cosi'
+  // smsAttivo si "resetta" da solo quando myTicket cambia, senza bisogno
+  // di un effect dedicato solo a reimpostare lo stato. "canaleTesto"
+  // ricorda quale dei due e' stato scelto, solo per il messaggio di
+  // conferma -- l'iscrizione stessa (tabella sms_notifiche) e' unica per
+  // ticket, un cliente ha un solo canale attivo alla volta.
   const [telefonoSms, setTelefonoSms] = useState("");
   const [smsTicket, setSmsTicket] = useState(null);
+  const [canaleTesto, setCanaleTesto] = useState("sms");
   const smsAttivo = smsTicket !== null && smsTicket === myTicket;
 
-  const attivaSmsCliente = async () => {
+  const attivaSmsCliente = async (canale) => {
     if (!telefonoSms.trim()) {
       alert("Inserisci un numero di telefono.");
       return;
     }
     try {
-      await iscrizioneSms(activeBusiness.id, myTicket, telefonoSms.trim());
+      await iscrizioneSms(activeBusiness.id, myTicket, telefonoSms.trim(), canale);
       setSmsTicket(myTicket);
+      setCanaleTesto(canale);
     } catch (e) {
-      console.error("Iscrizione SMS non riuscita:", e);
-      alert("Non è stato possibile attivare l'avviso via SMS. Riprova.");
+      console.error("Iscrizione avviso testuale non riuscita:", e);
+      alert("Non è stato possibile attivare l'avviso. Riprova.");
+    }
+  };
+
+  // Feedback post-servizio: stessa idea di "smsTicket" sopra, tenere il
+  // ticket per cui e' gia' stato lasciato invece di un booleano, cosi'
+  // si resetta da solo se il cliente prende un numero nuovo. La stella
+  // scelta resta "in sospeso" finche' non si preme Invia -- per una
+  // valutazione bassa serve prima poter scrivere un commento opzionale.
+  const [feedbackTicket, setFeedbackTicket] = useState(null);
+  // La selezione "in corso" (stelle toccate ma non ancora inviate) e' legata
+  // al numero di ticket a cui si riferisce, non un semplice valore: cosi',
+  // se il cliente prende un numero nuovo, la stella scelta per la visita
+  // precedente non resta visibile per errore -- senza bisogno di un effect
+  // dedicato solo a resettarla, e' gia' derivata dal confronto qui sotto.
+  const [feedbackBozza, setFeedbackBozza] = useState(null);
+  const feedbackGiaLasciato = feedbackTicket !== null && feedbackTicket === myTicket;
+  const feedbackValutazione = feedbackBozza?.ticket === myTicket ? feedbackBozza.valutazione : null;
+  const feedbackCommento = feedbackBozza?.ticket === myTicket ? feedbackBozza.commento : "";
+
+  const inviaFeedback = async () => {
+    if (!feedbackValutazione) return;
+    try {
+      await lasciaFeedback({
+        businessId: activeBusiness.id,
+        ticketNumber: myTicket,
+        repartoId: activeReparto?.id ?? null,
+        valutazione: feedbackValutazione,
+        commento: feedbackCommento,
+      });
+      setFeedbackTicket(myTicket);
+    } catch (e) {
+      console.error("Invio feedback non riuscito:", e);
+      alert("Non è stato possibile inviare il feedback. Riprova.");
     }
   };
 
@@ -1425,8 +1475,11 @@ const handleLogout = async () => {
     setFormSogliaAttesa(b.soglia_attesa != null ? String(b.soglia_attesa) : "");
     setFormSchermoAbilitato(b.schermo_abilitato ?? true);
     setFormSmsAbilitato(b.sms_abilitato ?? false);
+    setFormWhatsappAbilitato(b.whatsapp_abilitato ?? false);
     setFormPrenotazioniAbilitato(b.prenotazioni_abilitato ?? false);
     setFormSlotPrenotazioneMinuti(b.slot_prenotazione_minuti ?? 30);
+    setFormFeedbackAbilitato(b.feedback_abilitato ?? false);
+    setFormGoogleReviewUrl(b.google_review_url || "");
     setAttivitaInModifica(b);
     setVistaProvenienzaModifica(provenienza);
     setRegistered(false);
@@ -1509,8 +1562,11 @@ const handleLogout = async () => {
       soglia_attesa: formSogliaAttesa === "" ? null : Number(formSogliaAttesa),
       schermo_abilitato: formSchermoAbilitato,
       sms_abilitato: formSmsAbilitato,
+      whatsapp_abilitato: formWhatsappAbilitato,
       prenotazioni_abilitato: formPrenotazioniAbilitato,
       slot_prenotazione_minuti: formSlotPrenotazioneMinuti,
+      feedback_abilitato: formFeedbackAbilitato,
+      google_review_url: formGoogleReviewUrl.trim() || null,
     };
 
     if (attivitaInModifica) {
@@ -1568,8 +1624,11 @@ const handleLogout = async () => {
     setFormSogliaAttesa("");
     setFormSchermoAbilitato(true);
     setFormSmsAbilitato(false);
+    setFormWhatsappAbilitato(false);
     setFormPrenotazioniAbilitato(false);
     setFormSlotPrenotazioneMinuti(30);
+    setFormFeedbackAbilitato(false);
+    setFormGoogleReviewUrl("");
     setVistaProvenienzaModifica("operatore");
   };
 
@@ -2570,16 +2629,68 @@ const handleLogout = async () => {
                   Grazie per essere stato da noi
                 </div>
               )}
+              {giaServito && activeBusiness.feedback_abilitato && !feedbackGiaLasciato && (
+                <div style={{ marginTop: 12, textAlign: "center" }}>
+                  <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Com'è andata?</p>
+                  <div style={{ display: "flex", justifyContent: "center", gap: 2 }}>
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        aria-label={`${n} stelle`}
+                        onClick={() => setFeedbackBozza({ ticket: myTicket, valutazione: n, commento: feedbackCommento })}
+                        style={{ background: "none", border: "none", padding: 4, cursor: "pointer" }}
+                      >
+                        <Star size={28} color="#C99A3E" fill={feedbackValutazione && n <= feedbackValutazione ? "#C99A3E" : "none"} />
+                      </button>
+                    ))}
+                  </div>
+                  {feedbackValutazione && feedbackValutazione <= 3 && (
+                    <textarea
+                      className="ticket-field-input"
+                      style={{ marginTop: 10, minHeight: 60, resize: "vertical" }}
+                      placeholder="Cosa possiamo migliorare? (opzionale, resta privato)"
+                      value={feedbackCommento}
+                      onChange={(e) => setFeedbackBozza({ ticket: myTicket, valutazione: feedbackValutazione, commento: e.target.value })}
+                    />
+                  )}
+                  {feedbackValutazione && (
+                    <button className="cta dark" style={{ marginTop: 10 }} onClick={inviaFeedback}>
+                      Invia
+                    </button>
+                  )}
+                </div>
+              )}
+              {feedbackGiaLasciato && (
+                feedbackValutazione >= 4 && activeBusiness.google_review_url ? (
+                  <div style={{ marginTop: 12, textAlign: "center" }}>
+                    <p style={{ fontSize: 13, marginBottom: 10 }}>Grazie! Ti va di lasciarci una recensione anche su Google?</p>
+                    <a
+                      className="cta dark"
+                      style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, textDecoration: "none" }}
+                      href={activeBusiness.google_review_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <Star size={15} /> Lascia una recensione su Google
+                    </a>
+                  </div>
+                ) : (
+                  <p style={{ fontSize: 12.5, color: "#9FB3AC", marginTop: 12, textAlign: "center" }}>
+                    Grazie per il tuo feedback!
+                  </p>
+                )
+              )}
               {!giaServito && !notificheClienteAttive && (
                 <button className="cta ghost" onClick={attivaNotificheCliente}>
                   <Bell size={15} /> Avvisami quando manca poco
                 </button>
               )}
-              {!giaServito && !activeReparto && activeBusiness.sms_abilitato && (
+              {!giaServito && !activeReparto && (activeBusiness.sms_abilitato || activeBusiness.whatsapp_abilitato) && (
                 smsAttivo ? (
                   <p className="ticket-msg-sm" style={{ color: "rgba(22,48,43,0.65)", marginTop: 12, textAlign: "center" }}>
                     <MessageSquare size={13} style={{ display: "inline", marginRight: 4, position: "relative", top: -1 }} />
-                    Ti avviseremo via SMS al {telefonoSms}
+                    Ti avviseremo via {canaleTesto === "whatsapp" ? "WhatsApp" : "SMS"} al {telefonoSms}
                   </p>
                 ) : (
                   <div style={{ marginTop: 12 }}>
@@ -2590,9 +2701,18 @@ const handleLogout = async () => {
                       value={telefonoSms}
                       onChange={(e) => setTelefonoSms(e.target.value)}
                     />
-                    <button className="cta ghost" onClick={attivaSmsCliente}>
-                      <MessageSquare size={15} /> Avvisami via SMS
-                    </button>
+                    <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                      {activeBusiness.sms_abilitato && (
+                        <button className="cta ghost" style={{ flex: 1, minWidth: 0 }} onClick={() => attivaSmsCliente("sms")}>
+                          <MessageSquare size={15} /> Via SMS
+                        </button>
+                      )}
+                      {activeBusiness.whatsapp_abilitato && (
+                        <button className="cta ghost" style={{ flex: 1, minWidth: 0 }} onClick={() => attivaSmsCliente("whatsapp")}>
+                          <MessageSquare size={15} /> Via WhatsApp
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )
               )}
@@ -2845,7 +2965,7 @@ const handleLogout = async () => {
                         key={i}
                         disabled={!!activeReparto || activeBusiness.chiamata_prioritaria != null}
                         onClick={() => richiediPrioritario(current + i + 1, currentOggi + i + 1)}
-                        title="Chiama con priorita', fuori ordine"
+                        title={activeReparto ? undefined : "Chiama con priorita', fuori ordine"}
                       >
                         #{currentOggi + i + 1}
                       </button>
@@ -3147,6 +3267,41 @@ const handleLogout = async () => {
                     ))}
                   </div>
                 )}
+
+                <div className="stats-divider" />
+
+                <div className="board-label"><Star size={13} style={{ display: "inline", marginRight: 6, position: "relative", top: -1 }} />Feedback clienti</div>
+                {statsFeedback.conteggio === 0 ? (
+                  <p style={{ fontSize: 12.5, color: "#9FB3AC" }}>Nessun feedback in questo periodo.</p>
+                ) : (
+                  <>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+                      <div style={{ display: "flex" }}>
+                        {[1, 2, 3, 4, 5].map((n) => (
+                          <Star key={n} size={16} color="#C99A3E" fill={n <= Math.round(statsFeedback.media) ? "#C99A3E" : "none"} />
+                        ))}
+                      </div>
+                      <span style={{ fontSize: 12.5, color: "#9FB3AC" }}>
+                        {statsFeedback.media.toFixed(1)} su 5 ({statsFeedback.conteggio} {statsFeedback.conteggio === 1 ? "valutazione" : "valutazioni"})
+                      </span>
+                    </div>
+                    {statsFeedback.commenti.length > 0 && (
+                      <div className="admin-list" style={{ marginTop: 10 }}>
+                        {statsFeedback.commenti.map((f, i) => (
+                          <div className="admin-card" key={i} style={{ padding: 12 }}>
+                            <div style={{ display: "flex", gap: 2 }}>
+                              {[1, 2, 3, 4, 5].map((n) => (
+                                <Star key={n} size={12} color="#C99A3E" fill={n <= f.valutazione ? "#C99A3E" : "none"} />
+                              ))}
+                            </div>
+                            <div style={{ fontSize: 12.5, marginTop: 6 }}>{f.commento}</div>
+                            <div style={{ fontSize: 11, color: "#9FB3AC", marginTop: 4 }}>{formatData(f.created_at)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
               </>
             )}
           </div>
@@ -3276,6 +3431,11 @@ const handleLogout = async () => {
                     </button>
                   </>
                 )}
+                {formSchermoAbilitato && repartiInModifica.length > 0 && (
+                  <p style={{ fontSize: 11.5, color: "#C99A3E", marginTop: 8 }}>
+                    Con i reparti attivi lo schermo mostra ancora il numero dell'attivita' nel suo insieme, non aggiornato dai reparti: per ora resta fermo. Aggiornamento per reparto in arrivo.
+                  </p>
+                )}
 
                 <label className="field-label"><MessageSquare size={13} style={{ display: "inline", marginRight: 5, position: "relative", top: -1 }} />Avviso via SMS ai clienti</label>
                 <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: -4, marginBottom: 8 }}>
@@ -3284,6 +3444,15 @@ const handleLogout = async () => {
                 <div className="chip-row">
                   <button type="button" className={"chip" + (formSmsAbilitato ? " active" : "")} onClick={() => setFormSmsAbilitato(true)}>Attivo</button>
                   <button type="button" className={"chip" + (!formSmsAbilitato ? " active" : "")} onClick={() => setFormSmsAbilitato(false)}>Disattivato</button>
+                </div>
+
+                <label className="field-label"><MessageSquare size={13} style={{ display: "inline", marginRight: 5, position: "relative", top: -1 }} />Avviso via WhatsApp ai clienti</label>
+                <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: -4, marginBottom: 8 }}>
+                  Come l'SMS, ma su WhatsApp — di solito piu' economico e con piu' probabilita' di essere letto. Richiede un WhatsApp Sender configurato su Twilio: finche' e' in fase di test (Sandbox), riceve i messaggi solo chi si e' "unito" al Sandbox da telefono, non un cliente qualsiasi — attivalo per i clienti veri solo dopo aver completato la verifica.
+                </p>
+                <div className="chip-row">
+                  <button type="button" className={"chip" + (formWhatsappAbilitato ? " active" : "")} onClick={() => setFormWhatsappAbilitato(true)}>Attivo</button>
+                  <button type="button" className={"chip" + (!formWhatsappAbilitato ? " active" : "")} onClick={() => setFormWhatsappAbilitato(false)}>Disattivato</button>
                 </div>
 
                 <label className="field-label"><Clock size={13} style={{ display: "inline", marginRight: 5, position: "relative", top: -1 }} />Prenotazione fascia oraria</label>
@@ -3306,6 +3475,29 @@ const handleLogout = async () => {
                         Ogni {min} min
                       </button>
                     ))}
+                  </div>
+                )}
+
+                <label className="field-label"><Star size={13} style={{ display: "inline", marginRight: 5, position: "relative", top: -1 }} />Feedback dopo il servizio</label>
+                <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: -4, marginBottom: 8 }}>
+                  Dopo essere stato servito, al cliente viene chiesta una valutazione da 1 a 5. Se e' alta (4-5) e qui sotto hai messo il link alle tue recensioni Google, gli viene proposto di lasciarla anche li'; se e' bassa, gli viene chiesto un commento privato — mai pubblicato, lo vedi solo tu nelle Statistiche.
+                </p>
+                <div className="chip-row">
+                  <button type="button" className={"chip" + (formFeedbackAbilitato ? " active" : "")} onClick={() => setFormFeedbackAbilitato(true)}>Attivo</button>
+                  <button type="button" className={"chip" + (!formFeedbackAbilitato ? " active" : "")} onClick={() => setFormFeedbackAbilitato(false)}>Disattivato</button>
+                </div>
+                {formFeedbackAbilitato && (
+                  <div style={{ marginTop: 8 }}>
+                    <input
+                      type="url"
+                      className="field-input"
+                      placeholder="Link alle recensioni Google (opzionale)"
+                      value={formGoogleReviewUrl}
+                      onChange={(e) => setFormGoogleReviewUrl(e.target.value)}
+                    />
+                    <p style={{ fontSize: 11, color: "#9FB3AC", marginTop: 4 }}>
+                      Lo trovi sulla tua Scheda Google Business, sotto "Ottieni altre recensioni" — un link tipo google.com/maps/place/... o g.page/r/.../review. Senza questo link, al cliente viene mostrato solo il ringraziamento.
+                    </p>
                   </div>
                 )}
 
