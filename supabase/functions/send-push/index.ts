@@ -1,7 +1,7 @@
 // Riceve il payload di un Database Webhook su UPDATE di "businesses" o di
 // "reparti" e invia le notifiche push vere (Web Push standard: funzionano
-// anche ad app chiusa, se installata come PWA) e/o SMS (Twilio, se
-// configurato) quando:
+// anche ad app chiusa, se installata come PWA) e/o SMS/WhatsApp (Twilio,
+// se configurati) quando:
 // 1) la coda supera la soglia impostata dal titolare (soglia_coda,
 //    solo a livello di attivita': i reparti non hanno una soglia propria);
 // 2) un cliente arriva a 3 numeri o meno dal proprio turno ("manca poco",
@@ -32,6 +32,20 @@
 //   sms_abilitato), quindi non parte mai per un'attivita' che non l'ha
 //   attivato esplicitamente. Non ancora disponibile per i reparti (stesso
 //   ambito v1 della migration reparti).
+// - TWILIO_WHATSAPP_FROM_NUMBER (solo se si vuole anche WhatsApp, oltre
+//   a TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN gia' sopra): il proprio
+//   WhatsApp Sender con prefisso "whatsapp:", es. "whatsapp:+391234567".
+//   In fase di test si usa il numero del Sandbox Twilio condiviso
+//   ("whatsapp:+14155238886"): funziona SOLO con i numeri che si sono
+//   "uniti" al sandbox mandando il codice indicato da Twilio (Console ->
+//   Messaging -> Try it out -> Send a WhatsApp message), e SOLO con testo
+//   libero come questo -- niente template da approvare in sandbox. In
+//   produzione, con un Sender vero, i messaggi avviati dall'attivita'
+//   (non in risposta a un messaggio del cliente) richiedono invece un
+//   template approvato da Meta: questo codice andra' adattato quando si
+//   passa dal sandbox a un Sender approvato. Stesso comportamento "salta
+//   in silenzio se mancante" dell'SMS, gia' abilitato per-attivita' da
+//   businesses.whatsapp_abilitato.
 // SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY sono gia' disponibili di
 // default in ogni Edge Function Supabase, non serve impostarle a mano.
 //
@@ -53,6 +67,7 @@ webpush.setVapidDetails("mailto:info@prossimo.app", VAPID_PUBLIC_KEY, VAPID_PRIV
 const TWILIO_ACCOUNT_SID = Deno.env.get("TWILIO_ACCOUNT_SID");
 const TWILIO_AUTH_TOKEN = Deno.env.get("TWILIO_AUTH_TOKEN");
 const TWILIO_FROM_NUMBER = Deno.env.get("TWILIO_FROM_NUMBER");
+const TWILIO_WHATSAPP_FROM_NUMBER = Deno.env.get("TWILIO_WHATSAPP_FROM_NUMBER");
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -104,6 +119,48 @@ async function inviaSms(telefono: string, corpo: string) {
     }
   } catch (err) {
     console.error("Invio SMS fallito:", err);
+  }
+}
+
+// Stessa API Messages di Twilio dell'SMS sopra, solo con i numeri
+// prefissati "whatsapp:" (richiesto da Twilio per instradare sul canale
+// WhatsApp invece che SMS tradizionale).
+async function inviaWhatsapp(telefono: string, corpo: string) {
+  if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN || !TWILIO_WHATSAPP_FROM_NUMBER) return;
+  try {
+    const auth = btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`);
+    const body = new URLSearchParams({
+      To: `whatsapp:${telefono}`,
+      From: TWILIO_WHATSAPP_FROM_NUMBER,
+      Body: corpo,
+    });
+    const res = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${auth}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body,
+      }
+    );
+    if (!res.ok) {
+      console.error("Invio WhatsApp fallito:", await res.text());
+    }
+  } catch (err) {
+    console.error("Invio WhatsApp fallito:", err);
+  }
+}
+
+// Dispatcher: sms_notifiche.canale decide se il messaggio va per SMS o
+// WhatsApp, il resto della logica (soglie, testo, cancellazione riga) e'
+// identico per i due canali.
+async function inviaMessaggioTesto(riga: { telefono: string; canale: string }, corpo: string) {
+  if (riga.canale === "whatsapp") {
+    await inviaWhatsapp(riga.telefono, corpo);
+  } else {
+    await inviaSms(riga.telefono, corpo);
   }
 }
 
@@ -269,10 +326,11 @@ Deno.serve(async (req) => {
     }
   }
 
-  // --- 4) SMS al cliente: mancano pochi numeri (stessa logica del push,
-  // tabella separata perche' sms_notifiche non richiede permessi/gesture
-  // del browser, solo un numero di telefono). -------------------------------
-  if (record.sms_abilitato) {
+  // --- 4) SMS/WhatsApp al cliente: mancano pochi numeri (stessa logica del
+  // push, tabella separata perche' sms_notifiche non richiede permessi/
+  // gesture del browser, solo un numero di telefono). "canale" per riga
+  // decide se va per SMS o WhatsApp (vedi inviaMessaggioTesto sopra). -------
+  if (record.sms_abilitato || record.whatsapp_abilitato) {
     const { data: smsVicino } = await supabase
       .from("sms_notifiche")
       .select("*")
@@ -283,14 +341,14 @@ Deno.serve(async (req) => {
 
     for (const sms of smsVicino ?? []) {
       const posizione = sms.ticket_number - current - 1;
-      await inviaSms(
-        sms.telefono,
+      await inviaMessaggioTesto(
+        sms,
         `${record.name}: ${posizione <= 0 ? "tocca a te tra pochissimo, preparati." : `mancano solo ${posizione} numeri prima del tuo turno.`}`
       );
       await supabase.from("sms_notifiche").update({ avviso_vicino_inviato: true }).eq("id", sms.id);
     }
 
-    // --- 5) SMS al cliente: e' il suo turno ---------------------------------
+    // --- 5) SMS/WhatsApp al cliente: e' il suo turno -------------------------
     const { data: smsTurno } = await supabase
       .from("sms_notifiche")
       .select("*")
@@ -298,12 +356,12 @@ Deno.serve(async (req) => {
       .eq("ticket_number", current);
 
     for (const sms of smsTurno ?? []) {
-      await inviaSms(sms.telefono, `${record.name}: e' il tuo turno, vai alla cassa.`);
+      await inviaMessaggioTesto(sms, `${record.name}: e' il tuo turno, vai alla cassa.`);
       await supabase.from("sms_notifiche").delete().eq("id", sms.id);
     }
 
-    // --- 5b) SMS al cliente: chiamata prioritaria (fuori ordine), stesso
-    // motivo del punto 3b sopra. ---------------------------------------------
+    // --- 5b) SMS/WhatsApp al cliente: chiamata prioritaria (fuori ordine),
+    // stesso motivo del punto 3b sopra. ---------------------------------------
     if (record.chiamata_prioritaria != null && record.chiamata_prioritaria !== old_record.chiamata_prioritaria) {
       const { data: smsPrioritari } = await supabase
         .from("sms_notifiche")
@@ -312,7 +370,7 @@ Deno.serve(async (req) => {
         .eq("ticket_number", record.chiamata_prioritaria);
 
       for (const sms of smsPrioritari ?? []) {
-        await inviaSms(sms.telefono, `${record.name}: sei stato chiamato con priorita', vai alla cassa.`);
+        await inviaMessaggioTesto(sms, `${record.name}: sei stato chiamato con priorita', vai alla cassa.`);
         await supabase.from("sms_notifiche").delete().eq("id", sms.id);
       }
     }

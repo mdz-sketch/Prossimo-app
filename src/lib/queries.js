@@ -515,11 +515,14 @@ export async function schermoPubblico(slug) {
 }
 
 // --- Avviso SMS per il cliente (alternativa alla notifica push) -----------
-export async function iscrizioneSms(businessId, ticketNumber, telefono) {
+// canale: "sms" (default) o "whatsapp" -- stessa tabella, stesso
+// meccanismo di invio "manca poco"/"e' il tuo turno", cambia solo il
+// canale con cui la Edge Function invia il messaggio.
+export async function iscrizioneSms(businessId, ticketNumber, telefono, canale = "sms") {
   const { error } = await supabase
     .from("sms_notifiche")
     .upsert(
-      { business_id: businessId, ticket_number: ticketNumber, telefono },
+      { business_id: businessId, ticket_number: ticketNumber, telefono, canale },
       { onConflict: "business_id,ticket_number" }
     );
   if (error) throw error;

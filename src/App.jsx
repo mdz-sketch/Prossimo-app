@@ -679,6 +679,9 @@ const handleLogout = async () => {
   // provider SMS a pagamento gia' configurato dal titolare, non va
   // acceso finche' lui non lo fa esplicitamente.
   const [formSmsAbilitato, setFormSmsAbilitato] = useState(false);
+  // Stesso motivo/default di formSmsAbilitato: richiede un WhatsApp
+  // Sender configurato su Twilio (in test, il Sandbox).
+  const [formWhatsappAbilitato, setFormWhatsappAbilitato] = useState(false);
   // Anche questo di default disattivato: cambia il funzionamento della
   // coda per i clienti (numeri assegnati in automatico ad un orario),
   // va attivato esplicitamente invece di apparire di sorpresa.
@@ -836,28 +839,34 @@ const handleLogout = async () => {
     }
   };
 
-  // Avviso via SMS: alternativa alla notifica push per chi non vuole
-  // tenere la scheda del browser aperta o concedere permessi di notifica
-  // -- funziona su qualsiasi telefono, disponibile solo se il titolare
-  // l'ha attivata (activeBusiness.sms_abilitato). "smsTicket" (invece di
-  // un booleano) tiene traccia di PER QUALE ticket e' stata attivata:
-  // cosi' smsAttivo si "resetta" da solo quando myTicket cambia, senza
-  // bisogno di un effect dedicato solo a reimpostare lo stato.
+  // Avviso via SMS o WhatsApp: alternativa alla notifica push per chi non
+  // vuole tenere la scheda del browser aperta o concedere permessi di
+  // notifica -- funziona su qualsiasi telefono, disponibile solo se il
+  // titolare ha attivato almeno uno dei due canali (activeBusiness.
+  // sms_abilitato / whatsapp_abilitato). "smsTicket" (invece di un
+  // booleano) tiene traccia di PER QUALE ticket e' stata attivata: cosi'
+  // smsAttivo si "resetta" da solo quando myTicket cambia, senza bisogno
+  // di un effect dedicato solo a reimpostare lo stato. "canaleTesto"
+  // ricorda quale dei due e' stato scelto, solo per il messaggio di
+  // conferma -- l'iscrizione stessa (tabella sms_notifiche) e' unica per
+  // ticket, un cliente ha un solo canale attivo alla volta.
   const [telefonoSms, setTelefonoSms] = useState("");
   const [smsTicket, setSmsTicket] = useState(null);
+  const [canaleTesto, setCanaleTesto] = useState("sms");
   const smsAttivo = smsTicket !== null && smsTicket === myTicket;
 
-  const attivaSmsCliente = async () => {
+  const attivaSmsCliente = async (canale) => {
     if (!telefonoSms.trim()) {
       alert("Inserisci un numero di telefono.");
       return;
     }
     try {
-      await iscrizioneSms(activeBusiness.id, myTicket, telefonoSms.trim());
+      await iscrizioneSms(activeBusiness.id, myTicket, telefonoSms.trim(), canale);
       setSmsTicket(myTicket);
+      setCanaleTesto(canale);
     } catch (e) {
-      console.error("Iscrizione SMS non riuscita:", e);
-      alert("Non è stato possibile attivare l'avviso via SMS. Riprova.");
+      console.error("Iscrizione avviso testuale non riuscita:", e);
+      alert("Non è stato possibile attivare l'avviso. Riprova.");
     }
   };
 
@@ -1466,6 +1475,7 @@ const handleLogout = async () => {
     setFormSogliaAttesa(b.soglia_attesa != null ? String(b.soglia_attesa) : "");
     setFormSchermoAbilitato(b.schermo_abilitato ?? true);
     setFormSmsAbilitato(b.sms_abilitato ?? false);
+    setFormWhatsappAbilitato(b.whatsapp_abilitato ?? false);
     setFormPrenotazioniAbilitato(b.prenotazioni_abilitato ?? false);
     setFormSlotPrenotazioneMinuti(b.slot_prenotazione_minuti ?? 30);
     setFormFeedbackAbilitato(b.feedback_abilitato ?? false);
@@ -1552,6 +1562,7 @@ const handleLogout = async () => {
       soglia_attesa: formSogliaAttesa === "" ? null : Number(formSogliaAttesa),
       schermo_abilitato: formSchermoAbilitato,
       sms_abilitato: formSmsAbilitato,
+      whatsapp_abilitato: formWhatsappAbilitato,
       prenotazioni_abilitato: formPrenotazioniAbilitato,
       slot_prenotazione_minuti: formSlotPrenotazioneMinuti,
       feedback_abilitato: formFeedbackAbilitato,
@@ -1613,6 +1624,7 @@ const handleLogout = async () => {
     setFormSogliaAttesa("");
     setFormSchermoAbilitato(true);
     setFormSmsAbilitato(false);
+    setFormWhatsappAbilitato(false);
     setFormPrenotazioniAbilitato(false);
     setFormSlotPrenotazioneMinuti(30);
     setFormFeedbackAbilitato(false);
@@ -2674,11 +2686,11 @@ const handleLogout = async () => {
                   <Bell size={15} /> Avvisami quando manca poco
                 </button>
               )}
-              {!giaServito && !activeReparto && activeBusiness.sms_abilitato && (
+              {!giaServito && !activeReparto && (activeBusiness.sms_abilitato || activeBusiness.whatsapp_abilitato) && (
                 smsAttivo ? (
                   <p className="ticket-msg-sm" style={{ color: "rgba(22,48,43,0.65)", marginTop: 12, textAlign: "center" }}>
                     <MessageSquare size={13} style={{ display: "inline", marginRight: 4, position: "relative", top: -1 }} />
-                    Ti avviseremo via SMS al {telefonoSms}
+                    Ti avviseremo via {canaleTesto === "whatsapp" ? "WhatsApp" : "SMS"} al {telefonoSms}
                   </p>
                 ) : (
                   <div style={{ marginTop: 12 }}>
@@ -2689,9 +2701,18 @@ const handleLogout = async () => {
                       value={telefonoSms}
                       onChange={(e) => setTelefonoSms(e.target.value)}
                     />
-                    <button className="cta ghost" onClick={attivaSmsCliente}>
-                      <MessageSquare size={15} /> Avvisami via SMS
-                    </button>
+                    <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                      {activeBusiness.sms_abilitato && (
+                        <button className="cta ghost" style={{ flex: 1, minWidth: 0 }} onClick={() => attivaSmsCliente("sms")}>
+                          <MessageSquare size={15} /> Via SMS
+                        </button>
+                      )}
+                      {activeBusiness.whatsapp_abilitato && (
+                        <button className="cta ghost" style={{ flex: 1, minWidth: 0 }} onClick={() => attivaSmsCliente("whatsapp")}>
+                          <MessageSquare size={15} /> Via WhatsApp
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )
               )}
@@ -3423,6 +3444,15 @@ const handleLogout = async () => {
                 <div className="chip-row">
                   <button type="button" className={"chip" + (formSmsAbilitato ? " active" : "")} onClick={() => setFormSmsAbilitato(true)}>Attivo</button>
                   <button type="button" className={"chip" + (!formSmsAbilitato ? " active" : "")} onClick={() => setFormSmsAbilitato(false)}>Disattivato</button>
+                </div>
+
+                <label className="field-label"><MessageSquare size={13} style={{ display: "inline", marginRight: 5, position: "relative", top: -1 }} />Avviso via WhatsApp ai clienti</label>
+                <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: -4, marginBottom: 8 }}>
+                  Come l'SMS, ma su WhatsApp — di solito piu' economico e con piu' probabilita' di essere letto. Richiede un WhatsApp Sender configurato su Twilio: finche' e' in fase di test (Sandbox), riceve i messaggi solo chi si e' "unito" al Sandbox da telefono, non un cliente qualsiasi — attivalo per i clienti veri solo dopo aver completato la verifica.
+                </p>
+                <div className="chip-row">
+                  <button type="button" className={"chip" + (formWhatsappAbilitato ? " active" : "")} onClick={() => setFormWhatsappAbilitato(true)}>Attivo</button>
+                  <button type="button" className={"chip" + (!formWhatsappAbilitato ? " active" : "")} onClick={() => setFormWhatsappAbilitato(false)}>Disattivato</button>
                 </div>
 
                 <label className="field-label"><Clock size={13} style={{ display: "inline", marginRight: 5, position: "relative", top: -1 }} />Prenotazione fascia oraria</label>
