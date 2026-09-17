@@ -649,7 +649,6 @@ const handleLogout = async () => {
   const [statsFeedback, setStatsFeedback] = useState({ media: null, conteggio: 0, commenti: [] });
   const [avgWaitToday, setAvgWaitToday] = useState(0);
   const andamentoVuoto = { labels: ORE_GIORNO, serviti: ORE_GIORNO.map(() => 0), nonPresentati: ORE_GIORNO.map(() => 0), attesaMedia: ORE_GIORNO.map(() => 0) };
-  const [andamentoGiorno, setAndamentoGiorno] = useState(andamentoVuoto);
   const [andamentoStats, setAndamentoStats] = useState(andamentoVuoto);
 
   // Nella vista Settimana, marca nel grafico i giorni in cui l'attivita'
@@ -1319,13 +1318,6 @@ const handleLogout = async () => {
     setSkippedToday(count || 0);
     const oggi = await statisticheComplete(businessId, "giorno");
     setAvgWaitToday(oggi.attesaMedia);
-    andamentoPeriodo(
-      businessId,
-      "giorno",
-      0,
-      activeBusiness?.ora_apertura,
-      activeBusiness?.ora_chiusura
-    ).then(setAndamentoGiorno).catch(console.error);
   };
 
   useEffect(() => {
@@ -1344,7 +1336,6 @@ const handleLogout = async () => {
       refreshStats(activeBusiness.id);
     });
     return cleanup;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeBusiness?.id]);
 
   // Stessa idea, ma per il reparto scelto/in gestione: current/last_issued
@@ -3006,34 +2997,6 @@ const handleLogout = async () => {
                     </p>
                   )}
 
-                  {!activeReparto && (
-                    <>
-                      <div className="stats-divider" />
-
-                      <div className="board-label"><BarChart3 size={13} style={{ display: "inline", marginRight: 6, position: "relative", top: -1 }} />Andamento oggi — persone</div>
-                      <MiniBarChart
-                        labels={andamentoGiorno.labels}
-                        series={[
-                          { name: "Serviti", data: andamentoGiorno.serviti, color: "#C99A3E" },
-                          { name: "Non presentati", data: andamentoGiorno.nonPresentati, color: "#B7472A" },
-                        ]}
-                      />
-                      <p style={{ fontSize: 11, color: "#9FB3AC", marginTop: 10, textAlign: "center" }}>
-                        Per fascia oraria di oggi
-                      </p>
-
-                      <div className="board-label" style={{ marginTop: 18 }}>Andamento oggi — attesa media (min)</div>
-                      <MiniBarChart
-                        labels={andamentoGiorno.labels}
-                        series={[
-                          { name: "Attesa media (min)", data: andamentoGiorno.attesaMedia, color: "#5C87A6" },
-                        ]}
-                      />
-                      <p style={{ fontSize: 11, color: "#9FB3AC", marginTop: 10, textAlign: "center" }}>
-                        Per fascia oraria di oggi
-                      </p>
-                    </>
-                  )}
                 </>
               )}
             </div>
