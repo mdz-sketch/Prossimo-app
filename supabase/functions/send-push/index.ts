@@ -99,7 +99,16 @@ async function invia(sub: { id: string; endpoint: string; p256dh: string; auth: 
 // errori -- il resto della function (push) deve continuare a funzionare
 // anche per chi non ha mai configurato l'SMS.
 async function inviaSms(telefono: string, corpo: string) {
-  if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN || !TWILIO_FROM_NUMBER) return;
+  if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN || !TWILIO_FROM_NUMBER) {
+    // DEBUG TEMPORANEO: vedi commento piu' sotto nello stesso blocco.
+    await supabase.from("debug_notifiche_log").insert({
+      canale: "sms",
+      telefono,
+      http_status: null,
+      corpo_risposta: `secrets mancanti: SID=${!!TWILIO_ACCOUNT_SID} TOKEN=${!!TWILIO_AUTH_TOKEN} FROM=${!!TWILIO_FROM_NUMBER}`,
+    });
+    return;
+  }
   try {
     const auth = btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`);
     const body = new URLSearchParams({ To: telefono, From: TWILIO_FROM_NUMBER, Body: corpo });
@@ -114,8 +123,19 @@ async function inviaSms(telefono: string, corpo: string) {
         body,
       }
     );
+    const testoRisposta = await res.text();
+    // DEBUG TEMPORANEO: la Console Twilio di questo progetto richiede
+    // upgrade per vedere i log, e i log della function accessibili da
+    // qui non mostrano l'output interno -- si scrive qui per poterla
+    // leggere via SQL. Rimuovere una volta risolto il problema di invio.
+    await supabase.from("debug_notifiche_log").insert({
+      canale: "sms",
+      telefono,
+      http_status: res.status,
+      corpo_risposta: testoRisposta,
+    });
     if (!res.ok) {
-      console.error("Invio SMS fallito:", await res.text());
+      console.error("Invio SMS fallito:", testoRisposta);
     }
   } catch (err) {
     console.error("Invio SMS fallito:", err);
@@ -145,8 +165,16 @@ async function inviaWhatsapp(telefono: string, corpo: string) {
         body,
       }
     );
+    const testoRisposta = await res.text();
+    // DEBUG TEMPORANEO: vedi commento in inviaSms sopra.
+    await supabase.from("debug_notifiche_log").insert({
+      canale: "whatsapp",
+      telefono: `whatsapp:${telefono}`,
+      http_status: res.status,
+      corpo_risposta: testoRisposta,
+    });
     if (!res.ok) {
-      console.error("Invio WhatsApp fallito:", await res.text());
+      console.error("Invio WhatsApp fallito:", testoRisposta);
     }
   } catch (err) {
     console.error("Invio WhatsApp fallito:", err);
