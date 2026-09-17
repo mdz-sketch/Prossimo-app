@@ -2725,7 +2725,7 @@ const handleLogout = async () => {
                     <input
                       type="tel"
                       className="ticket-field-input"
-                      placeholder="Il tuo numero di telefono"
+                      placeholder="Es. +39 333 1234567"
                       value={telefonoSms}
                       onChange={(e) => setTelefonoSms(e.target.value)}
                     />
