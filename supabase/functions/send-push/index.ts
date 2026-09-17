@@ -153,14 +153,30 @@ async function inviaWhatsapp(telefono: string, corpo: string) {
   }
 }
 
+// Twilio (SMS e WhatsApp) richiede il formato internazionale E.164
+// ("+39..."): il campo telefono lato cliente (src/App.jsx) e' un
+// semplice <input type="tel"> senza normalizzazione, quindi arrivano
+// spesso numeri italiani senza prefisso (es. "3288736867") -- inviarli
+// cosi' a Twilio viene rifiutato in silenzio (l'errore lo si vede solo
+// nei log della funzione, non in questa dashboard). +39 come default e'
+// ragionevole per un pubblico italiano; chi lo scrive gia' col prefisso
+// (qualsiasi prefisso, non solo +39) non viene toccato.
+function normalizzaE164(telefono: string) {
+  const pulito = telefono.trim().replace(/[\s()-]/g, "");
+  if (pulito.startsWith("+")) return pulito;
+  if (pulito.startsWith("00")) return `+${pulito.slice(2)}`;
+  return `+39${pulito}`;
+}
+
 // Dispatcher: sms_notifiche.canale decide se il messaggio va per SMS o
 // WhatsApp, il resto della logica (soglie, testo, cancellazione riga) e'
 // identico per i due canali.
 async function inviaMessaggioTesto(riga: { telefono: string; canale: string }, corpo: string) {
+  const telefono = normalizzaE164(riga.telefono);
   if (riga.canale === "whatsapp") {
-    await inviaWhatsapp(riga.telefono, corpo);
+    await inviaWhatsapp(telefono, corpo);
   } else {
-    await inviaSms(riga.telefono, corpo);
+    await inviaSms(telefono, corpo);
   }
 }
 
