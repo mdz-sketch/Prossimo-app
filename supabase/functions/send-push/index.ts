@@ -32,20 +32,17 @@
 //   sms_abilitato), quindi non parte mai per un'attivita' che non l'ha
 //   attivato esplicitamente. Non ancora disponibile per i reparti (stesso
 //   ambito v1 della migration reparti).
-// - TWILIO_WHATSAPP_FROM_NUMBER (solo se si vuole anche WhatsApp, oltre
-//   a TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN gia' sopra): il proprio
-//   WhatsApp Sender con prefisso "whatsapp:", es. "whatsapp:+391234567".
-//   In fase di test si usa il numero del Sandbox Twilio condiviso
-//   ("whatsapp:+14155238886"): funziona SOLO con i numeri che si sono
-//   "uniti" al sandbox mandando il codice indicato da Twilio (Console ->
-//   Messaging -> Try it out -> Send a WhatsApp message), e SOLO con testo
-//   libero come questo -- niente template da approvare in sandbox. In
-//   produzione, con un Sender vero, i messaggi avviati dall'attivita'
-//   (non in risposta a un messaggio del cliente) richiedono invece un
-//   template approvato da Meta: questo codice andra' adattato quando si
-//   passa dal sandbox a un Sender approvato. Stesso comportamento "salta
-//   in silenzio se mancante" dell'SMS, gia' abilitato per-attivita' da
-//   businesses.whatsapp_abilitato.
+// - META_WHATSAPP_ACCESS_TOKEN, META_WHATSAPP_PHONE_NUMBER_ID (solo se si
+//   vuole anche WhatsApp): WhatsApp Cloud API di Meta chiamata
+//   direttamente (Graph API), non tramite Twilio -- nessun costo di
+//   infrastruttura, il numero di test che Meta assegna in "API Setup" e'
+//   gratuito. Restano comunque le regole della piattaforma WhatsApp,
+//   Meta o Twilio che sia: un messaggio avviato dall'attivita' (non in
+//   risposta a un messaggio del cliente, come "e' il tuo turno") richiede
+//   un template approvato da Meta -- solo le risposte entro 24h da un
+//   messaggio del cliente possono usare testo libero. Stesso
+//   comportamento "salta in silenzio se mancante" dell'SMS, gia'
+//   abilitato per-attivita' da businesses.whatsapp_abilitato.
 // SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY sono gia' disponibili di
 // default in ogni Edge Function Supabase, non serve impostarle a mano.
 //
@@ -67,7 +64,8 @@ webpush.setVapidDetails("mailto:info@prossimo.app", VAPID_PUBLIC_KEY, VAPID_PRIV
 const TWILIO_ACCOUNT_SID = Deno.env.get("TWILIO_ACCOUNT_SID");
 const TWILIO_AUTH_TOKEN = Deno.env.get("TWILIO_AUTH_TOKEN");
 const TWILIO_FROM_NUMBER = Deno.env.get("TWILIO_FROM_NUMBER");
-const TWILIO_WHATSAPP_FROM_NUMBER = Deno.env.get("TWILIO_WHATSAPP_FROM_NUMBER");
+const META_WHATSAPP_ACCESS_TOKEN = Deno.env.get("META_WHATSAPP_ACCESS_TOKEN");
+const META_WHATSAPP_PHONE_NUMBER_ID = Deno.env.get("META_WHATSAPP_PHONE_NUMBER_ID");
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -142,34 +140,32 @@ async function inviaSms(telefono: string, corpo: string) {
   }
 }
 
-// Stessa API Messages di Twilio dell'SMS sopra, solo con i numeri
-// prefissati "whatsapp:" (richiesto da Twilio per instradare sul canale
-// WhatsApp invece che SMS tradizionale).
+// WhatsApp Cloud API di Meta, chiamata direttamente via Graph API (non
+// tramite Twilio): "to" vuole solo cifre (senza "+" ne' "whatsapp:").
 async function inviaWhatsapp(telefono: string, corpo: string) {
-  if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN || !TWILIO_WHATSAPP_FROM_NUMBER) return;
+  if (!META_WHATSAPP_ACCESS_TOKEN || !META_WHATSAPP_PHONE_NUMBER_ID) return;
   try {
-    const auth = btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`);
-    const body = new URLSearchParams({
-      To: `whatsapp:${telefono}`,
-      From: TWILIO_WHATSAPP_FROM_NUMBER,
-      Body: corpo,
-    });
     const res = await fetch(
-      `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`,
+      `https://graph.facebook.com/v21.0/${META_WHATSAPP_PHONE_NUMBER_ID}/messages`,
       {
         method: "POST",
         headers: {
-          Authorization: `Basic ${auth}`,
-          "Content-Type": "application/x-www-form-urlencoded",
+          Authorization: `Bearer ${META_WHATSAPP_ACCESS_TOKEN}`,
+          "Content-Type": "application/json",
         },
-        body,
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          to: telefono.replace("+", ""),
+          type: "text",
+          text: { body: corpo },
+        }),
       }
     );
     const testoRisposta = await res.text();
     // DEBUG TEMPORANEO: vedi commento in inviaSms sopra.
     await supabase.from("debug_notifiche_log").insert({
       canale: "whatsapp",
-      telefono: `whatsapp:${telefono}`,
+      telefono,
       http_status: res.status,
       corpo_risposta: testoRisposta,
     });
