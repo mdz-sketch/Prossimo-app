@@ -283,6 +283,34 @@ const suonaCampanello = (ctx) => {
   }
 };
 
+// Notifica del browser (leggera: funziona solo finche' la scheda e'
+// aperta, anche in background -- diversa dal push vero via service
+// worker in src/lib/push.js). "new Notification(...)" diretto e'
+// vietato dal browser quando c'e' un service worker attivo (questa app
+// ne registra sempre uno per il push, vedi main.jsx): su Chrome
+// Android lancia "Failed to construct 'Notification': Illegal
+// constructor", che senza un error boundary manda l'intera app in
+// schermata bianca. Va usato invece registration.showNotification(),
+// la via corretta quando un service worker e' presente -- con un
+// fallback al costruttore diretto solo per i (rari) browser senza
+// supporto ai service worker.
+const notificaBrowser = (titolo, opzioni) => {
+  if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.ready
+      .then((registration) => registration.showNotification(titolo, opzioni))
+      .catch(() => {
+        // Best effort, come suono/vibrazione: se fallisce non blocca nient'altro.
+      });
+    return;
+  }
+  try {
+    new Notification(titolo, opzioni);
+  } catch {
+    // Idem: nessun blocco per il resto dell'app.
+  }
+};
+
 // Rintocco per lo schermo pubblico in negozio: deve farsi notare in una
 // stanza intera, non solo da chi tiene il telefono in mano -- volume piu'
 // alto e tre note (invece di due) invece del "ding-dong" personale sopra,
@@ -769,8 +797,8 @@ const handleLogout = async () => {
     }
     if (allertaGiaNotificata.current || !notificheAttive) return;
     allertaGiaNotificata.current = true;
-    if (typeof Notification !== "undefined" && Notification.permission === "granted" && activeBusiness) {
-      new Notification(`${activeBusiness.name}: coda lunga`, {
+    if (activeBusiness) {
+      notificaBrowser(`${activeBusiness.name}: coda lunga`, {
         body: sogliaCodaSuperata
           ? `${inCoda} persone in coda (soglia: ${activeBusiness.soglia_coda})`
           : `Attesa stimata ~${attesaStimataCoda} min (soglia: ${activeBusiness.soglia_attesa} min)`,
@@ -1014,8 +1042,8 @@ const handleLogout = async () => {
     }
     if (posizioneGiaNotificata.current || !notificheClienteAttive) return;
     posizioneGiaNotificata.current = true;
-    if (typeof Notification !== "undefined" && Notification.permission === "granted" && activeBusiness) {
-      new Notification(`${activeBusiness.name}: manca poco!`, {
+    if (activeBusiness) {
+      notificaBrowser(`${activeBusiness.name}: manca poco!`, {
         body: position === 0
           ? "Tocca a te tra pochissimo, preparati."
           : `Mancano solo ${position} numeri prima del tuo turno.`,
@@ -1036,8 +1064,8 @@ const handleLogout = async () => {
       // piu' casi del solo pulse).
       suonaCampanello(audioCtxRef.current);
       navigator.vibrate?.([200, 100, 200]);
-      if (typeof Notification !== "undefined" && Notification.permission === "granted" && activeBusiness) {
-        new Notification(`${activeBusiness.name}: tocca a te!`, {
+      if (activeBusiness) {
+        notificaBrowser(`${activeBusiness.name}: tocca a te!`, {
           body: "È il tuo turno, vai alla cassa.",
         });
       }
