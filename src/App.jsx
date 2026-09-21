@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, BarChart3, MapPin, Tag, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Printer, AlertTriangle, Download, Users, Mail, ShieldCheck, Monitor, Type, MessageSquare, CalendarClock, LayoutGrid, Trash2, Star } from "lucide-react";
+import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, BarChart3, MapPin, Tag, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Printer, AlertTriangle, Download, Users, Mail, ShieldCheck, Monitor, Type, MessageSquare, CalendarClock, LayoutGrid, Trash2, Star, CreditCard } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "./lib/supabaseClient";
 import Login from "./components/Login";
@@ -1629,6 +1629,33 @@ const handleLogout = async () => {
 
     selezionaAttivita(data);
     setRegistered(true);
+  };
+
+  const [checkoutInCorso, setCheckoutInCorso] = useState(null);
+
+  const avviaCheckoutPiano = async (piano) => {
+    if (!attivitaInModifica) return;
+    setCheckoutInCorso(piano);
+    setErrore("");
+    try {
+      const { data, error } = await supabase.functions.invoke("stripe-checkout", {
+        body: {
+          businessId: attivitaInModifica.id,
+          piano,
+          successUrl: window.location.href,
+          cancelUrl: window.location.href,
+        },
+      });
+      if (error || !data?.url) {
+        setErrore("Errore nell'avvio del pagamento: " + (error?.message || data?.error || "riprova"));
+        setCheckoutInCorso(null);
+        return;
+      }
+      window.location.href = data.url;
+    } catch (err) {
+      setErrore("Errore nell'avvio del pagamento: " + err.message);
+      setCheckoutInCorso(null);
+    }
   };
 
   const nuovaRegistrazione = () => {
@@ -3494,6 +3521,35 @@ const handleLogout = async () => {
 
                 {attivitaInModifica && (
                   <>
+                    <label className="field-label"><CreditCard size={13} style={{ display: "inline", marginRight: 5, position: "relative", top: -1 }} />Il mio piano</label>
+                    <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: -4, marginBottom: 8 }}>
+                      Piano attuale: <strong>{{ gratis: "Gratis", pro: "Pro", business: "Business" }[attivitaInModifica.piano || "gratis"]}</strong>
+                    </p>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
+                      {(attivitaInModifica.piano || "gratis") !== "pro" && (attivitaInModifica.piano || "gratis") !== "business" && (
+                        <button
+                          type="button"
+                          className="cta dark"
+                          style={{ margin: 0, flex: 1, minWidth: 140 }}
+                          onClick={() => avviaCheckoutPiano("pro")}
+                          disabled={checkoutInCorso !== null}
+                        >
+                          {checkoutInCorso === "pro" ? "Un momento..." : "Passa a Pro — €14,90/mese"}
+                        </button>
+                      )}
+                      {(attivitaInModifica.piano || "gratis") !== "business" && (
+                        <button
+                          type="button"
+                          className="cta dark"
+                          style={{ margin: 0, flex: 1, minWidth: 140 }}
+                          onClick={() => avviaCheckoutPiano("business")}
+                          disabled={checkoutInCorso !== null}
+                        >
+                          {checkoutInCorso === "business" ? "Un momento..." : "Passa a Business — €24,90/mese"}
+                        </button>
+                      )}
+                    </div>
+
                     <label className="field-label"><LayoutGrid size={13} style={{ display: "inline", marginRight: 5, position: "relative", top: -1 }} />Reparti (code multiple)</label>
                     <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: -4, marginBottom: 8 }}>
                       Servizi distinti con numerazione indipendente (es. "Cassa" e "Ritiro ordini"). Senza reparti l'attivita' continua a funzionare con un'unica coda, come oggi. Prenotazione fascia oraria, SMS e chiamata prioritaria restano per ora legati all'attivita' nel suo insieme, non al singolo reparto.
