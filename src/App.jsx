@@ -557,7 +557,23 @@ const handleLogout = async () => {
     return () => clearInterval(t);
   }, []);
   const statoOrari = activeBusiness ? statoApertura(activeBusiness, oraCorrente) : null;
+  // Gating per piano (vedi docs/piani-abbonamento.md): reparti,
+  // chiamata prioritaria, prenotazioni, staff multipli e feedback
+  // richiedono Pro o superiore; SMS/WhatsApp richiedono Business. I
+  // dati restano sempre salvati (mai cancellati per downgrade), qui si
+  // blocca solo l'uso -- vedi anche i controlli lato DB (trigger
+  // blocca_seconda_attivita_gratis) per la parte che non puo' dipendere
+  // solo dal client.
+  const pianoConsentePro = (activeBusiness?.piano || "gratis") !== "gratis";
+  const pianoConsenteBusiness = (activeBusiness?.piano || "gratis") === "business";
   const [mieAttivitaList, setMieAttivitaList] = useState([]);
+  const attivitaPossedute = mieAttivitaList.filter((b) => b.ruolo === "proprietario");
+  // Piano Gratis: una sola attivita' posseduta. Per crearne altre serve
+  // che almeno una di quelle gia' possedute sia su un piano a pagamento
+  // (vedi trigger blocca_seconda_attivita_gratis lato DB -- questo e'
+  // solo per nascondere il pulsante, il vincolo vero e' server-side).
+  const puoCrearNuovaAttivita =
+    attivitaPossedute.length === 0 || attivitaPossedute.some((b) => (b.piano || "gratis") !== "gratis");
   const [codiceInvito, setCodiceInvito] = useState("");
   const [erroreInvito, setErroreInvito] = useState("");
   const [invitoInCorso, setInvitoInCorso] = useState(false);
@@ -683,6 +699,11 @@ const handleLogout = async () => {
   // Attivita' in fase di modifica (form "Crea Attivita'" riusato per
   // editare): null quando si sta creando una nuova attivita'.
   const [attivitaInModifica, setAttivitaInModifica] = useState(null);
+  // Gating per piano nel form (nuova registrazione = sempre gratis, non
+  // esiste ancora un'attivita' con un piano proprio).
+  const formPianoAttuale = attivitaInModifica ? (attivitaInModifica.piano || "gratis") : "gratis";
+  const formPianoConsentePro = formPianoAttuale !== "gratis";
+  const formPianoConsenteBusiness = formPianoAttuale === "business";
   // Vista da cui si e' aperta la modifica (Le mie attivita'/Admin/Utenti):
   // ci si torna al salvataggio o all'annullamento, invece di atterrare
   // sempre su "operatore" anche quando si arrivava da un'altra schermata.
@@ -2490,7 +2511,9 @@ const handleLogout = async () => {
           {!isAdmin && (
             <button className={"tab-btn" + (view === "operatore" ? " active" : "")} onClick={() => setView("operatore")}>Operatore</button>
           )}
-          <button className={"tab-btn" + (view === "registrazione" ? " active" : "")} onClick={() => { setAttivitaInModifica(null); nuovaRegistrazione(); setView("registrazione"); }}>Crea Attività</button>
+          {puoCrearNuovaAttivita && (
+            <button className={"tab-btn" + (view === "registrazione" ? " active" : "")} onClick={() => { setAttivitaInModifica(null); nuovaRegistrazione(); setView("registrazione"); }}>Crea Attività</button>
+          )}
           {isAdmin && (
             <button className={"tab-btn" + (view === "admin" ? " active" : "")} onClick={() => setView("admin")}>Admin</button>
           )}
@@ -2525,7 +2548,7 @@ const handleLogout = async () => {
                 Scansiona il QR code esposto nel locale per prendere il tuo numero.
               </p>
             </div>
-          ) : repartiBusiness.length > 0 && !activeReparto ? (
+          ) : repartiBusiness.length > 0 && pianoConsentePro && !activeReparto ? (
             <div className="ticket" style={{ textAlign: "center" }}>
               <div className="eyebrow">{activeBusiness.name}</div>
               <div className="ticket-title" style={{ marginTop: 10 }}>
@@ -2623,7 +2646,7 @@ const handleLogout = async () => {
               <button className="cta primary" onClick={prendiNumero}>
                 Prendi il tuo numero <ArrowRight size={16} />
               </button>
-              {!activeReparto && activeBusiness.prenotazioni_abilitato && (
+              {!activeReparto && activeBusiness.prenotazioni_abilitato && pianoConsentePro && (
                 <button className="cta ghost" onClick={() => setMostraSceltaSlot(true)}>
                   <CalendarClock size={15} /> Prenota una fascia oraria
                 </button>
@@ -2675,7 +2698,7 @@ const handleLogout = async () => {
                   Grazie per essere stato da noi
                 </div>
               )}
-              {giaServito && activeBusiness.feedback_abilitato && !feedbackGiaLasciato && (
+              {giaServito && activeBusiness.feedback_abilitato && pianoConsentePro && !feedbackGiaLasciato && (
                 <div style={{ marginTop: 12, textAlign: "center" }}>
                   <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Com'è andata?</p>
                   <div style={{ display: "flex", justifyContent: "center", gap: 2 }}>
@@ -2732,7 +2755,7 @@ const handleLogout = async () => {
                   <Bell size={15} /> Avvisami quando manca poco
                 </button>
               )}
-              {!giaServito && !activeReparto && (activeBusiness.sms_abilitato || activeBusiness.whatsapp_abilitato) && (
+              {!giaServito && !activeReparto && (activeBusiness.sms_abilitato || activeBusiness.whatsapp_abilitato) && (smsAttivo || pianoConsenteBusiness) && (
                 smsAttivo ? (
                   <p className="ticket-msg-sm" style={{ color: "rgba(22,48,43,0.65)", marginTop: 12, textAlign: "center" }}>
                     <MessageSquare size={13} style={{ display: "inline", marginRight: 4, position: "relative", top: -1 }} />
@@ -2846,13 +2869,15 @@ const handleLogout = async () => {
                       </div>
                       {b.ruolo === "proprietario" && (
                         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                          <button
-                            className="cta dark"
-                            style={{ flex: 1, minWidth: 0 }}
-                            onClick={() => apriPannelloStaff(b)}
-                          >
-                            Staff
-                          </button>
+                          {(b.piano || "gratis") !== "gratis" && (
+                            <button
+                              className="cta dark"
+                              style={{ flex: 1, minWidth: 0 }}
+                              onClick={() => apriPannelloStaff(b)}
+                            >
+                              Staff
+                            </button>
+                          )}
                           <button className="cta" style={{ flex: 1, minWidth: 0, background: "#C0392B", color: "#F1ECDA", border: "none" }} onClick={() => handleElimina(b)}>
                             Elimina
                           </button>
@@ -2905,7 +2930,7 @@ const handleLogout = async () => {
                   </div>
                 </div>
               </div>
-              {repartiBusiness.length > 0 && (
+              {repartiBusiness.length > 0 && pianoConsentePro && (
                 <div className="chip-row" style={{ marginBottom: 16 }}>
                   {repartiBusiness.map((r) => (
                     <button
@@ -2920,7 +2945,7 @@ const handleLogout = async () => {
                 </div>
               )}
 
-              {repartiBusiness.length > 0 && !activeReparto ? (
+              {repartiBusiness.length > 0 && pianoConsentePro && !activeReparto ? (
                 <p style={{ fontSize: 13, color: "#9FB3AC" }}>
                   Scegli un reparto qui sopra per iniziare a gestirlo.
                 </p>
@@ -3009,16 +3034,16 @@ const handleLogout = async () => {
                         type="button"
                         className="queue-chip queue-chip-clickable"
                         key={i}
-                        disabled={!!activeReparto || activeBusiness.chiamata_prioritaria != null}
+                        disabled={!!activeReparto || activeBusiness.chiamata_prioritaria != null || !pianoConsentePro}
                         onClick={() => richiediPrioritario(current + i + 1, currentOggi + i + 1)}
-                        title={activeReparto ? undefined : "Chiama con priorita', fuori ordine"}
+                        title={activeReparto ? undefined : pianoConsentePro ? "Chiama con priorita', fuori ordine" : "Disponibile dal piano Pro"}
                       >
                         #{currentOggi + i + 1}
                       </button>
                     ))}
                     {inCoda === 0 && <span style={{ fontSize: 13, color: "#9FB3AC" }}>Nessuno in coda al momento.</span>}
                   </div>
-                  {!activeReparto && inCoda > 0 && (
+                  {!activeReparto && inCoda > 0 && pianoConsentePro && (
                     <p style={{ fontSize: 11, color: "#9FB3AC", marginTop: 6 }}>
                       Tocca un numero per chiamarlo subito con priorita', fuori ordine.
                     </p>
@@ -3455,68 +3480,84 @@ const handleLogout = async () => {
                   </p>
                 )}
 
-                <label className="field-label"><MessageSquare size={13} style={{ display: "inline", marginRight: 5, position: "relative", top: -1 }} />Avviso via SMS ai clienti</label>
-                <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: -4, marginBottom: 8 }}>
-                  In alternativa alla notifica push, i clienti potranno lasciare un numero di telefono per essere avvisati via SMS. Richiede un provider SMS a pagamento gia' configurato (costo per messaggio inviato) — attivalo solo dopo aver completato quella configurazione.
-                </p>
-                <div className="chip-row">
-                  <button type="button" className={"chip" + (formSmsAbilitato ? " active" : "")} onClick={() => setFormSmsAbilitato(true)}>Attivo</button>
-                  <button type="button" className={"chip" + (!formSmsAbilitato ? " active" : "")} onClick={() => setFormSmsAbilitato(false)}>Disattivato</button>
-                </div>
+                {formPianoConsenteBusiness ? (
+                  <>
+                    <label className="field-label"><MessageSquare size={13} style={{ display: "inline", marginRight: 5, position: "relative", top: -1 }} />Avviso via SMS ai clienti</label>
+                    <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: -4, marginBottom: 8 }}>
+                      In alternativa alla notifica push, i clienti potranno lasciare un numero di telefono per essere avvisati via SMS. Richiede un provider SMS a pagamento gia' configurato (costo per messaggio inviato) — attivalo solo dopo aver completato quella configurazione.
+                    </p>
+                    <div className="chip-row">
+                      <button type="button" className={"chip" + (formSmsAbilitato ? " active" : "")} onClick={() => setFormSmsAbilitato(true)}>Attivo</button>
+                      <button type="button" className={"chip" + (!formSmsAbilitato ? " active" : "")} onClick={() => setFormSmsAbilitato(false)}>Disattivato</button>
+                    </div>
 
-                <label className="field-label"><MessageSquare size={13} style={{ display: "inline", marginRight: 5, position: "relative", top: -1 }} />Avviso via WhatsApp ai clienti</label>
-                <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: -4, marginBottom: 8 }}>
-                  Come l'SMS, ma su WhatsApp — di solito piu' economico e con piu' probabilita' di essere letto. Richiede un WhatsApp Sender configurato su Twilio: finche' e' in fase di test (Sandbox), riceve i messaggi solo chi si e' "unito" al Sandbox da telefono, non un cliente qualsiasi — attivalo per i clienti veri solo dopo aver completato la verifica.
-                </p>
-                <div className="chip-row">
-                  <button type="button" className={"chip" + (formWhatsappAbilitato ? " active" : "")} onClick={() => setFormWhatsappAbilitato(true)}>Attivo</button>
-                  <button type="button" className={"chip" + (!formWhatsappAbilitato ? " active" : "")} onClick={() => setFormWhatsappAbilitato(false)}>Disattivato</button>
-                </div>
-
-                <label className="field-label"><Clock size={13} style={{ display: "inline", marginRight: 5, position: "relative", top: -1 }} />Prenotazione fascia oraria</label>
-                <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: -4, marginBottom: 8 }}>
-                  I clienti potranno prenotare un orario piu' tardi nella stessa giornata invece di dover scansionare il QR sul posto: al momento prenotato ricevono in automatico un numero vero, nella stessa coda di chi si presenta di persona.
-                </p>
-                <div className="chip-row">
-                  <button type="button" className={"chip" + (formPrenotazioniAbilitato ? " active" : "")} onClick={() => setFormPrenotazioniAbilitato(true)}>Attivo</button>
-                  <button type="button" className={"chip" + (!formPrenotazioniAbilitato ? " active" : "")} onClick={() => setFormPrenotazioniAbilitato(false)}>Disattivato</button>
-                </div>
-                {formPrenotazioniAbilitato && (
-                  <div className="chip-row" style={{ marginTop: 8 }}>
-                    {[15, 30, 60].map((min) => (
-                      <button
-                        key={min}
-                        type="button"
-                        className={"chip" + (formSlotPrenotazioneMinuti === min ? " active" : "")}
-                        onClick={() => setFormSlotPrenotazioneMinuti(min)}
-                      >
-                        Ogni {min} min
-                      </button>
-                    ))}
-                  </div>
+                    <label className="field-label"><MessageSquare size={13} style={{ display: "inline", marginRight: 5, position: "relative", top: -1 }} />Avviso via WhatsApp ai clienti</label>
+                    <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: -4, marginBottom: 8 }}>
+                      Come l'SMS, ma su WhatsApp — di solito piu' economico e con piu' probabilita' di essere letto. Richiede un WhatsApp Sender configurato su Twilio: finche' e' in fase di test (Sandbox), riceve i messaggi solo chi si e' "unito" al Sandbox da telefono, non un cliente qualsiasi — attivalo per i clienti veri solo dopo aver completato la verifica.
+                    </p>
+                    <div className="chip-row">
+                      <button type="button" className={"chip" + (formWhatsappAbilitato ? " active" : "")} onClick={() => setFormWhatsappAbilitato(true)}>Attivo</button>
+                      <button type="button" className={"chip" + (!formWhatsappAbilitato ? " active" : "")} onClick={() => setFormWhatsappAbilitato(false)}>Disattivato</button>
+                    </div>
+                  </>
+                ) : (
+                  <p style={{ fontSize: 11.5, color: "#9FB3AC" }}>
+                    Avviso via SMS/WhatsApp ai clienti disponibile dal piano Business.
+                  </p>
                 )}
 
-                <label className="field-label"><Star size={13} style={{ display: "inline", marginRight: 5, position: "relative", top: -1 }} />Feedback dopo il servizio</label>
-                <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: -4, marginBottom: 8 }}>
-                  Dopo essere stato servito, al cliente viene chiesta una valutazione da 1 a 5. Se e' alta (4-5) e qui sotto hai messo il link alle tue recensioni Google, gli viene proposto di lasciarla anche li'; se e' bassa, gli viene chiesto un commento privato — mai pubblicato, lo vedi solo tu nelle Statistiche.
-                </p>
-                <div className="chip-row">
-                  <button type="button" className={"chip" + (formFeedbackAbilitato ? " active" : "")} onClick={() => setFormFeedbackAbilitato(true)}>Attivo</button>
-                  <button type="button" className={"chip" + (!formFeedbackAbilitato ? " active" : "")} onClick={() => setFormFeedbackAbilitato(false)}>Disattivato</button>
-                </div>
-                {formFeedbackAbilitato && (
-                  <div style={{ marginTop: 8 }}>
-                    <input
-                      type="url"
-                      className="field-input"
-                      placeholder="Link alle recensioni Google (opzionale)"
-                      value={formGoogleReviewUrl}
-                      onChange={(e) => setFormGoogleReviewUrl(e.target.value)}
-                    />
-                    <p style={{ fontSize: 11, color: "#9FB3AC", marginTop: 4 }}>
-                      Lo trovi sulla tua Scheda Google Business, sotto "Ottieni altre recensioni" — un link tipo google.com/maps/place/... o g.page/r/.../review. Senza questo link, al cliente viene mostrato solo il ringraziamento.
+                {formPianoConsentePro ? (
+                  <>
+                    <label className="field-label"><Clock size={13} style={{ display: "inline", marginRight: 5, position: "relative", top: -1 }} />Prenotazione fascia oraria</label>
+                    <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: -4, marginBottom: 8 }}>
+                      I clienti potranno prenotare un orario piu' tardi nella stessa giornata invece di dover scansionare il QR sul posto: al momento prenotato ricevono in automatico un numero vero, nella stessa coda di chi si presenta di persona.
                     </p>
-                  </div>
+                    <div className="chip-row">
+                      <button type="button" className={"chip" + (formPrenotazioniAbilitato ? " active" : "")} onClick={() => setFormPrenotazioniAbilitato(true)}>Attivo</button>
+                      <button type="button" className={"chip" + (!formPrenotazioniAbilitato ? " active" : "")} onClick={() => setFormPrenotazioniAbilitato(false)}>Disattivato</button>
+                    </div>
+                    {formPrenotazioniAbilitato && (
+                      <div className="chip-row" style={{ marginTop: 8 }}>
+                        {[15, 30, 60].map((min) => (
+                          <button
+                            key={min}
+                            type="button"
+                            className={"chip" + (formSlotPrenotazioneMinuti === min ? " active" : "")}
+                            onClick={() => setFormSlotPrenotazioneMinuti(min)}
+                          >
+                            Ogni {min} min
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    <label className="field-label"><Star size={13} style={{ display: "inline", marginRight: 5, position: "relative", top: -1 }} />Feedback dopo il servizio</label>
+                    <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: -4, marginBottom: 8 }}>
+                      Dopo essere stato servito, al cliente viene chiesta una valutazione da 1 a 5. Se e' alta (4-5) e qui sotto hai messo il link alle tue recensioni Google, gli viene proposto di lasciarla anche li'; se e' bassa, gli viene chiesto un commento privato — mai pubblicato, lo vedi solo tu nelle Statistiche.
+                    </p>
+                    <div className="chip-row">
+                      <button type="button" className={"chip" + (formFeedbackAbilitato ? " active" : "")} onClick={() => setFormFeedbackAbilitato(true)}>Attivo</button>
+                      <button type="button" className={"chip" + (!formFeedbackAbilitato ? " active" : "")} onClick={() => setFormFeedbackAbilitato(false)}>Disattivato</button>
+                    </div>
+                    {formFeedbackAbilitato && (
+                      <div style={{ marginTop: 8 }}>
+                        <input
+                          type="url"
+                          className="field-input"
+                          placeholder="Link alle recensioni Google (opzionale)"
+                          value={formGoogleReviewUrl}
+                          onChange={(e) => setFormGoogleReviewUrl(e.target.value)}
+                        />
+                        <p style={{ fontSize: 11, color: "#9FB3AC", marginTop: 4 }}>
+                          Lo trovi sulla tua Scheda Google Business, sotto "Ottieni altre recensioni" — un link tipo google.com/maps/place/... o g.page/r/.../review. Senza questo link, al cliente viene mostrato solo il ringraziamento.
+                        </p>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <p style={{ fontSize: 11.5, color: "#9FB3AC" }}>
+                    Prenotazioni e feedback post-servizio disponibili dal piano Pro.
+                  </p>
                 )}
 
                 {attivitaInModifica && (
@@ -3569,52 +3610,60 @@ const handleLogout = async () => {
                       </>
                     )}
 
-                    <label className="field-label"><LayoutGrid size={13} style={{ display: "inline", marginRight: 5, position: "relative", top: -1 }} />Reparti (code multiple)</label>
-                    <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: -4, marginBottom: 8 }}>
-                      Servizi distinti con numerazione indipendente (es. "Cassa" e "Ritiro ordini"). Senza reparti l'attivita' continua a funzionare con un'unica coda, come oggi. Prenotazione fascia oraria, SMS e chiamata prioritaria restano per ora legati all'attivita' nel suo insieme, non al singolo reparto.
-                    </p>
-                    {repartiInModifica.map((r) => (
-                      <div key={r.id} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                        <input
-                          className="field-input"
-                          style={{ flex: 1 }}
-                          value={r.nome}
-                          onChange={(e) => {
-                            const nuovoNome = e.target.value;
-                            setRepartiInModifica((prev) => prev.map((x) => (x.id === r.id ? { ...x, nome: nuovoNome } : x)));
-                          }}
-                          onBlur={(e) => salvaRinominaReparto(r.id, e.target.value)}
-                        />
-                        <button
-                          type="button"
-                          className="cta"
-                          style={{ margin: 0, width: "auto", padding: "0 14px", background: "transparent", color: "#B7472A", border: "1px solid rgba(183,71,42,0.4)" }}
-                          onClick={() => rimuoviReparto(r)}
-                          title="Elimina reparto"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    ))}
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <input
-                        className="field-input"
-                        style={{ flex: 1 }}
-                        placeholder="Nome del nuovo reparto"
-                        value={nuovoRepartoNome}
-                        onChange={(e) => setNuovoRepartoNome(e.target.value)}
-                      />
-                      <button
-                        type="button"
-                        className="cta dark"
-                        style={{ margin: 0, width: "auto", padding: "0 14px" }}
-                        onClick={aggiungiReparto}
-                        disabled={!nuovoRepartoNome.trim()}
-                        title="Aggiungi reparto"
-                      >
-                        <Plus size={15} />
-                      </button>
-                    </div>
+                    {(attivitaInModifica.piano || "gratis") === "gratis" ? (
+                      <p style={{ fontSize: 11.5, color: "#9FB3AC" }}>
+                        Reparti, chiamata prioritaria, prenotazioni, staff multipli e feedback sono disponibili dal piano Pro — vedi sopra "Il mio piano".
+                      </p>
+                    ) : (
+                      <>
+                        <label className="field-label"><LayoutGrid size={13} style={{ display: "inline", marginRight: 5, position: "relative", top: -1 }} />Reparti (code multiple)</label>
+                        <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: -4, marginBottom: 8 }}>
+                          Servizi distinti con numerazione indipendente (es. "Cassa" e "Ritiro ordini"). Senza reparti l'attivita' continua a funzionare con un'unica coda, come oggi. Prenotazione fascia oraria, SMS e chiamata prioritaria restano per ora legati all'attivita' nel suo insieme, non al singolo reparto.
+                        </p>
+                        {repartiInModifica.map((r) => (
+                          <div key={r.id} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                            <input
+                              className="field-input"
+                              style={{ flex: 1 }}
+                              value={r.nome}
+                              onChange={(e) => {
+                                const nuovoNome = e.target.value;
+                                setRepartiInModifica((prev) => prev.map((x) => (x.id === r.id ? { ...x, nome: nuovoNome } : x)));
+                              }}
+                              onBlur={(e) => salvaRinominaReparto(r.id, e.target.value)}
+                            />
+                            <button
+                              type="button"
+                              className="cta"
+                              style={{ margin: 0, width: "auto", padding: "0 14px", background: "transparent", color: "#B7472A", border: "1px solid rgba(183,71,42,0.4)" }}
+                              onClick={() => rimuoviReparto(r)}
+                              title="Elimina reparto"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        ))}
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <input
+                            className="field-input"
+                            style={{ flex: 1 }}
+                            placeholder="Nome del nuovo reparto"
+                            value={nuovoRepartoNome}
+                            onChange={(e) => setNuovoRepartoNome(e.target.value)}
+                          />
+                          <button
+                            type="button"
+                            className="cta dark"
+                            style={{ margin: 0, width: "auto", padding: "0 14px" }}
+                            onClick={aggiungiReparto}
+                            disabled={!nuovoRepartoNome.trim()}
+                            title="Aggiungi reparto"
+                          >
+                            <Plus size={15} />
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </>
                 )}
 
