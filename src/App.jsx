@@ -3550,6 +3550,25 @@ const handleLogout = async () => {
                       )}
                     </div>
 
+                    {(attivitaInModifica.piano || "gratis") === "gratis" && (
+                      <>
+                        <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: -10, marginBottom: 8 }}>
+                          Sul piano Gratis le statistiche restano visibili fino a 12 mesi indietro, ma senza export. {attivitaInModifica.export_abilitato ? "Hai già l'export attivo." : "Puoi sbloccare l'export Excel/PDF separatamente:"}
+                        </p>
+                        {!attivitaInModifica.export_abilitato && (
+                          <button
+                            type="button"
+                            className="cta ghost"
+                            style={{ margin: 0, marginBottom: 18 }}
+                            onClick={() => avviaCheckoutPiano("export")}
+                            disabled={checkoutInCorso !== null}
+                          >
+                            {checkoutInCorso === "export" ? "Un momento..." : "Attiva l'export — +€5/mese"}
+                          </button>
+                        )}
+                      </>
+                    )}
+
                     <label className="field-label"><LayoutGrid size={13} style={{ display: "inline", marginRight: 5, position: "relative", top: -1 }} />Reparti (code multiple)</label>
                     <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: -4, marginBottom: 8 }}>
                       Servizi distinti con numerazione indipendente (es. "Cassa" e "Ritiro ordini"). Senza reparti l'attivita' continua a funzionare con un'unica coda, come oggi. Prenotazione fascia oraria, SMS e chiamata prioritaria restano per ora legati all'attivita' nel suo insieme, non al singolo reparto.
