@@ -13,6 +13,7 @@ import {
   statisticheComplete,
   andamentoPeriodo,
   etichettaPeriodo,
+  offsetMinimoPeriodo,
   cercaAttivita,
   mieAttivita,
   unisciAttivita,
@@ -566,6 +567,12 @@ const handleLogout = async () => {
   // solo dal client.
   const pianoConsentePro = (activeBusiness?.piano || "gratis") !== "gratis";
   const pianoConsenteBusiness = (activeBusiness?.piano || "gratis") === "business";
+  // Profondita' statistiche per piano: Gratis 12 mesi, Pro 24, Business
+  // illimitato (null). L'export (Excel/PDF) richiede Pro/Business, oppure
+  // l'add-on separato su Gratis (export_abilitato).
+  const profonditaStatisticheMesi =
+    activeBusiness?.piano === "business" ? null : activeBusiness?.piano === "pro" ? 24 : 12;
+  const puoEsportareStatistiche = pianoConsentePro || !!activeBusiness?.export_abilitato;
   const [mieAttivitaList, setMieAttivitaList] = useState([]);
   const attivitaPossedute = mieAttivitaList.filter((b) => b.ruolo === "proprietario");
   // Piano Gratis: una sola attivita' posseduta. Per crearne altre serve
@@ -678,6 +685,7 @@ const handleLogout = async () => {
     setStatsPeriodPage(periodo);
     setStatsOffset(0);
   };
+  const statsOffsetMinimo = offsetMinimoPeriodo(statsPeriodPage, profonditaStatisticheMesi);
 
   useEffect(() => {
     if (view !== "statistiche" || !activeBusiness?.id) return;
@@ -3215,7 +3223,9 @@ const handleLogout = async () => {
                     className="cta dark"
                     style={{ margin: 0, width: "auto", padding: "8px 10px" }}
                     onClick={() => setStatsOffset((o) => o - 1)}
+                    disabled={statsOffsetMinimo !== null && statsOffset <= statsOffsetMinimo}
                     aria-label="Periodo precedente"
+                    title={statsOffsetMinimo !== null && statsOffset <= statsOffsetMinimo ? `Il tuo piano mostra al massimo ${profonditaStatisticheMesi} mesi di storico` : undefined}
                   >
                     <ChevronLeft size={16} />
                   </button>
@@ -3233,22 +3243,28 @@ const handleLogout = async () => {
                   </button>
                 </div>
 
-                <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-                  <button
-                    className="cta dark"
-                    style={{ margin: 0, flex: 1, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 12.5 }}
-                    onClick={() => esportaCsv(activeBusiness, statsPeriodPage, etichettaPeriodo(statsPeriodPage, statsOffset), statsData, andamentoStats)}
-                  >
-                    <FileSpreadsheet size={14} /> Esporta Excel
-                  </button>
-                  <button
-                    className="cta dark"
-                    style={{ margin: 0, flex: 1, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 12.5 }}
-                    onClick={() => esportaPdf(activeBusiness, statsPeriodPage, etichettaPeriodo(statsPeriodPage, statsOffset), statsData, andamentoStats)}
-                  >
-                    <FileText size={14} /> Esporta PDF
-                  </button>
-                </div>
+                {puoEsportareStatistiche ? (
+                  <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                    <button
+                      className="cta dark"
+                      style={{ margin: 0, flex: 1, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 12.5 }}
+                      onClick={() => esportaCsv(activeBusiness, statsPeriodPage, etichettaPeriodo(statsPeriodPage, statsOffset), statsData, andamentoStats)}
+                    >
+                      <FileSpreadsheet size={14} /> Esporta Excel
+                    </button>
+                    <button
+                      className="cta dark"
+                      style={{ margin: 0, flex: 1, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 12.5 }}
+                      onClick={() => esportaPdf(activeBusiness, statsPeriodPage, etichettaPeriodo(statsPeriodPage, statsOffset), statsData, andamentoStats)}
+                    >
+                      <FileText size={14} /> Esporta PDF
+                    </button>
+                  </div>
+                ) : (
+                  <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: 14 }}>
+                    Export Excel/PDF non incluso nel piano Gratis — attivalo separatamente (+€5/mese) o passa a Pro dalla scheda "Il mio piano".
+                  </p>
+                )}
 
                 <div className="stat-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)", marginTop: 14 }}>
                   <div className="stat-box">

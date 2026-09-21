@@ -195,6 +195,21 @@ function dataFinePeriodo(periodo, offset = 0) {
   return dataInizioPeriodo(periodo, offset + 1);
 }
 
+// Profondita' statistiche per piano (vedi docs/piani-abbonamento.md):
+// Gratis 12 mesi, Pro 24 mesi, Business illimitato. Restituisce l'offset
+// piu' negativo ancora navigabile per il tipo di periodo scelto (es. per
+// "mese" e 12 mesi indietro, -12); null = nessun limite.
+export function offsetMinimoPeriodo(periodo, mesiIndietro) {
+  if (mesiIndietro == null) return null;
+  const now = new Date();
+  const confine = new Date(now.getFullYear(), now.getMonth() - mesiIndietro, now.getDate());
+  if (periodo === "mese") return -mesiIndietro;
+  if (periodo === "anno") return -Math.ceil(mesiIndietro / 12);
+  const giorni = Math.ceil((now - confine) / (1000 * 60 * 60 * 24));
+  if (periodo === "settimana") return -Math.ceil(giorni / 7);
+  return -giorni; // "giorno"
+}
+
 // Etichetta leggibile del periodo mostrato, per le frecce di navigazione.
 export function etichettaPeriodo(periodo, offset = 0) {
   const now = new Date();
