@@ -32,6 +32,7 @@ const PIANO_PER_PRICE: Record<string, string> = {
   price_1UIApyGobISDxDjflkn7xTP3: "pro",
   price_1UIApyGobISDxDjfLsxlTZ83: "business",
 };
+const PRICE_EXPORT_ADDON = "price_1UIB8NGobISDxDjfBfQM1jp9";
 
 async function aggiornaPianoDaSubscription(subscription: Stripe.Subscription) {
   const businessId = subscription.metadata?.business_id;
@@ -40,8 +41,23 @@ async function aggiornaPianoDaSubscription(subscription: Stripe.Subscription) {
     return;
   }
 
-  if (subscription.status === "active" || subscription.status === "trialing") {
-    const priceId = subscription.items.data[0]?.price.id;
+  const priceId = subscription.items.data[0]?.price.id;
+  const attiva = subscription.status === "active" || subscription.status === "trialing";
+
+  if (priceId === PRICE_EXPORT_ADDON) {
+    // Add-on export (+5EUR/mese sul piano gratis): non tocca piano, solo
+    // export_abilitato -- indipendente dall'eventuale abbonamento Pro/Business.
+    await supabase
+      .from("businesses")
+      .update({
+        export_abilitato: attiva,
+        stripe_export_subscription_id: attiva ? subscription.id : null,
+      })
+      .eq("id", businessId);
+    return;
+  }
+
+  if (attiva) {
     const piano = priceId ? PIANO_PER_PRICE[priceId] : undefined;
     if (!piano) {
       console.error("Price id sconosciuto sulla subscription:", priceId);

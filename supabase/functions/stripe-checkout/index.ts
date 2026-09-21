@@ -30,6 +30,7 @@ const supabase = createClient(
 const PRICE_ID: Record<string, string> = {
   pro: "price_1UIApyGobISDxDjflkn7xTP3",
   business: "price_1UIApyGobISDxDjfLsxlTZ83",
+  export: "price_1UIB8NGobISDxDjfBfQM1jp9",
 };
 
 // A differenza delle altre edge function di questo progetto (chiamate
