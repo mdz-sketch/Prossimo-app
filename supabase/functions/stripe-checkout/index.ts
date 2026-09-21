@@ -6,11 +6,15 @@
 // Configurazione richiesta, Supabase -> Edge Functions -> Secrets:
 // - STRIPE_SECRET_KEY
 //
-// verify_jwt abilitato: solo un utente autenticato puo' chiamare questa
-// function, e qui sotto si verifica anche che sia proprio il proprietario
-// dell'attivita' richiesta (altrimenti chiunque autenticato potrebbe
-// avviare un checkout -- e a fine pagamento il webhook -- per l'attivita'
-// di qualcun altro).
+// verify_jwt DISABILITATO a livello piattaforma: con verify_jwt attivo,
+// Supabase blocca anche la richiesta preflight OPTIONS del browser (non
+// porta l'header Authorization) prima ancora che arrivi a questo codice
+// -- effetto "clicco e non succede niente", nessun errore visibile.
+// L'autenticazione la si fa qui sotto a mano (auth.getUser sul token
+// ricevuto), e si verifica anche che chi chiama sia proprio il
+// proprietario dell'attivita' richiesta (altrimenti chiunque autenticato
+// potrebbe avviare un checkout -- e a fine pagamento il webhook -- per
+// l'attivita' di qualcun altro).
 
 import Stripe from "npm:stripe@17";
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -28,18 +32,33 @@ const PRICE_ID: Record<string, string> = {
   business: "price_1UIApyGobISDxDjfLsxlTZ83",
 };
 
+// A differenza delle altre edge function di questo progetto (chiamate
+// server-to-server da un webhook), questa la chiama direttamente il
+// browser: senza header CORS il preflight OPTIONS fallisce e la
+// richiesta non parte nemmeno, con l'effetto "clicco e non succede
+// niente" (nessun errore visibile, il fetch non arriva neanche a
+// eseguirsi).
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: CORS_HEADERS });
+  }
+  const jsonHeaders = { ...CORS_HEADERS, "Content-Type": "application/json" };
   try {
     const authHeader = req.headers.get("Authorization") ?? "";
     const jwt = authHeader.replace("Bearer ", "");
     const { data: userData, error: userErr } = await supabase.auth.getUser(jwt);
     if (userErr || !userData?.user) {
-      return new Response(JSON.stringify({ error: "Non autenticato" }), { status: 401 });
+      return new Response(JSON.stringify({ error: "Non autenticato" }), { status: 401, headers: jsonHeaders });
     }
 
     const { businessId, piano, successUrl, cancelUrl } = await req.json();
     if (!businessId || !piano || !PRICE_ID[piano]) {
-      return new Response(JSON.stringify({ error: "Parametri mancanti o piano non valido" }), { status: 400 });
+      return new Response(JSON.stringify({ error: "Parametri mancanti o piano non valido" }), { status: 400, headers: jsonHeaders });
     }
 
     const { data: business, error: bizErr } = await supabase
@@ -48,10 +67,10 @@ Deno.serve(async (req) => {
       .eq("id", businessId)
       .single();
     if (bizErr || !business) {
-      return new Response(JSON.stringify({ error: "Attivita' non trovata" }), { status: 404 });
+      return new Response(JSON.stringify({ error: "Attivita' non trovata" }), { status: 404, headers: jsonHeaders });
     }
     if (business.owner_id !== userData.user.id) {
-      return new Response(JSON.stringify({ error: "Non sei il proprietario di questa attivita'" }), { status: 403 });
+      return new Response(JSON.stringify({ error: "Non sei il proprietario di questa attivita'" }), { status: 403, headers: jsonHeaders });
     }
 
     let customerId = business.stripe_customer_id;
@@ -74,11 +93,9 @@ Deno.serve(async (req) => {
       cancel_url: cancelUrl,
     });
 
-    return new Response(JSON.stringify({ url: session.url }), {
-      headers: { "Content-Type": "application/json" },
-    });
+    return new Response(JSON.stringify({ url: session.url }), { headers: jsonHeaders });
   } catch (err) {
     console.error("Errore creazione checkout:", err);
-    return new Response(JSON.stringify({ error: "Errore interno" }), { status: 500 });
+    return new Response(JSON.stringify({ error: "Errore interno" }), { status: 500, headers: jsonHeaders });
   }
 });
