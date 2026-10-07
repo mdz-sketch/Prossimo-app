@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, BarChart3, MapPin, Tag, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Printer, AlertTriangle, Download, Users, Mail, ShieldCheck, Monitor, Type, MessageSquare, CalendarClock, LayoutGrid, Trash2, Star, CreditCard } from "lucide-react";
+import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, BarChart3, MapPin, Tag, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Printer, AlertTriangle, Download, Users, Mail, ShieldCheck, Monitor, Type, MessageSquare, CalendarClock, LayoutGrid, Trash2, Star, CreditCard, Palette } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "./lib/supabaseClient";
 import Login from "./components/Login";
@@ -160,7 +160,7 @@ function Trend({ attuale, precedente, invertito = false }) {
   if (attuale === 0 && precedente === 0) return null;
   const diff = attuale - precedente;
   if (diff === 0) {
-    return <div style={{ fontSize: 10, color: "#9FB3AC", marginTop: 3 }}>= periodo prec.</div>;
+    return <div style={{ fontSize: 10, color: "var(--c-muted)", marginTop: 3 }}>= periodo prec.</div>;
   }
   const migliorato = invertito ? diff < 0 : diff > 0;
   const percentuale = precedente > 0 ? Math.round((Math.abs(diff) / precedente) * 100) : null;
@@ -641,6 +641,19 @@ const handleLogout = async () => {
     setTestoGrande((v) => {
       const nuovo = !v;
       localStorage.setItem("prossimo_testo_grande", nuovo ? "1" : "0");
+      return nuovo;
+    });
+  };
+
+  // Schema colori: scelta per-dispositivo (come il testo grande), non per
+  // attivita' — ognuno vede l'app nel tema che preferisce sul proprio schermo.
+  const [temaTeal, setTemaTeal] = useState(
+    () => localStorage.getItem("prossimo_tema") === "teal"
+  );
+  const cambiaTema = () => {
+    setTemaTeal((v) => {
+      const nuovo = !v;
+      localStorage.setItem("prossimo_tema", nuovo ? "teal" : "scuro");
       return nuovo;
     });
   };
@@ -1957,7 +1970,7 @@ const handleLogout = async () => {
   }
 
   return (
-    <div className="board">
+    <div className={"board" + (temaTeal ? " tema-teal" : "")}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=IBM+Plex+Mono:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
 
@@ -1966,14 +1979,45 @@ const handleLogout = async () => {
         }
 
         .board {
+          --c-bg: #16302B;
+          --c-bg-rgb: 22,48,43;
+          --c-panel: #0F211D;
+          --c-panel-hover: #142a24;
+          --c-light: #F1ECDA;
+          --c-light-rgb: 241,236,218;
+          --c-muted: #9FB3AC;
+          --c-muted-rgb: 159,179,172;
+          --c-primary: #C99A3E;
+          --c-primary-rgb: 201,154,62;
+          --c-primary-hover: #d9ac52;
+          --c-primary-light: #e6c073;
+          --c-primary-dark: #ab8333;
+        }
+        .board.tema-teal {
+          --c-bg: #1a232a;
+          --c-bg-rgb: 26,35,42;
+          --c-panel: #141b21;
+          --c-panel-hover: #1c2630;
+          --c-light: #f4faf8;
+          --c-light-rgb: 244,250,248;
+          --c-muted: #e2e8f0;
+          --c-muted-rgb: 226,232,240;
+          --c-primary: #319795;
+          --c-primary-rgb: 49,151,149;
+          --c-primary-hover: #3fb0ad;
+          --c-primary-light: #6cc9c7;
+          --c-primary-dark: #1c6462;
+        }
+
+        .board {
           min-height: 100vh;
           width: 100%;
-          background: #16302B;
+          background: var(--c-bg);
           background-image:
-            radial-gradient(circle at 15% 8%, rgba(201,154,62,0.10), transparent 40%),
+            radial-gradient(circle at 15% 8%, rgba(var(--c-primary-rgb),0.10), transparent 40%),
             radial-gradient(circle at 85% 92%, rgba(183,71,42,0.10), transparent 45%);
           font-family: 'IBM Plex Sans', sans-serif;
-          color: #F1ECDA;
+          color: var(--c-light);
           display: flex;
           flex-direction: column;
           align-items: center;
@@ -1987,17 +2031,31 @@ const handleLogout = async () => {
           letter-spacing: -0.02em;
           font-size: 15px;
           text-transform: uppercase;
-          color: #C99A3E;
+          color: var(--c-primary);
           display: flex;
           align-items: center;
           gap: 8px;
         }
         .wordmark .dot { width: 7px; height: 7px; border-radius: 999px; background: #B7472A; }
+        .wordmark-row { display: flex; align-items: center; justify-content: space-between; }
+        .tema-toggle {
+          border: none;
+          background: transparent;
+          color: var(--c-muted);
+          cursor: pointer;
+          width: 32px;
+          height: 32px;
+          border-radius: 999px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .tema-toggle:hover { color: var(--c-light); }
 
         .tabs {
           margin-top: 18px;
           display: flex;
-          background: #0F211D;
+          background: var(--c-panel);
           border-radius: 999px;
           padding: 4px;
           gap: 4px;
@@ -2012,15 +2070,15 @@ const handleLogout = async () => {
           font-size: 13px;
           cursor: pointer;
           background: transparent;
-          color: #9FB3AC;
+          color: var(--c-muted);
           transition: all 0.2s ease;
         }
-        .tab-btn.active { background: #C99A3E; color: #16302B; }
+        .tab-btn.active { background: var(--c-primary); color: var(--c-bg); }
 
         .ticket {
           margin-top: 22px;
-          background: #F1ECDA;
-          color: #16302B;
+          background: var(--c-light);
+          color: var(--c-bg);
           border-radius: 18px;
           padding: 26px 22px 22px;
           position: relative;
@@ -2030,7 +2088,7 @@ const handleLogout = async () => {
           content: "";
           position: absolute;
           width: 22px; height: 22px;
-          background: #16302B;
+          background: var(--c-bg);
           border-radius: 999px;
           top: 50%;
           transform: translateY(-50%);
@@ -2038,7 +2096,7 @@ const handleLogout = async () => {
         .ticket::before { left: -11px; }
         .ticket::after { right: -11px; }
         .perf {
-          border-top: 2px dashed rgba(22,48,43,0.25);
+          border-top: 2px dashed rgba(var(--c-bg-rgb),0.25);
           margin: 18px 0;
         }
 
@@ -2048,7 +2106,7 @@ const handleLogout = async () => {
           font-weight: 600;
           letter-spacing: 0.12em;
           text-transform: uppercase;
-          color: rgba(22,48,43,0.55);
+          color: rgba(var(--c-bg-rgb),0.55);
         }
 
         .flap-row { display: flex; gap: 6px; perspective: 400px; }
@@ -2059,7 +2117,7 @@ const handleLogout = async () => {
 
         .flap-shell {
           position: relative;
-          background: #16302B;
+          background: var(--c-bg);
           border-radius: 6px;
           overflow: hidden;
         }
@@ -2071,7 +2129,7 @@ const handleLogout = async () => {
         .flap-face {
           font-family: 'IBM Plex Mono', monospace;
           font-weight: 700;
-          color: #F1ECDA;
+          color: var(--c-light);
         }
         .flap-card.is-flipping { animation: flipDown 0.26s ease-in-out; }
         @keyframes flipDown {
@@ -2100,26 +2158,26 @@ const handleLogout = async () => {
           cursor: pointer;
           display: flex; align-items: center; justify-content: center; gap: 8px;
         }
-        .cta.primary { background: #C99A3E; color: #16302B; }
-        .cta.primary:hover { background: #d9ac52; }
-        .cta.ghost { background: transparent; color: #9FB3AC; border: 1px solid rgba(159,179,172,0.3); margin-top: 12px; }
-        .cta.ghost:hover { color: #F1ECDA; border-color: rgba(241,236,218,0.4); }
-        .cta.dark { background: #0F211D; color: #F1ECDA; }
-        .cta.dark:hover { background: #142a24; }
-        .cta:focus-visible { outline: 2px solid #C99A3E; outline-offset: 2px; }
+        .cta.primary { background: var(--c-primary); color: var(--c-bg); }
+        .cta.primary:hover { background: var(--c-primary-hover); }
+        .cta.ghost { background: transparent; color: var(--c-muted); border: 1px solid rgba(var(--c-muted-rgb),0.3); margin-top: 12px; }
+        .cta.ghost:hover { color: var(--c-light); border-color: rgba(var(--c-light-rgb),0.4); }
+        .cta.dark { background: var(--c-panel); color: var(--c-light); }
+        .cta.dark:hover { background: var(--c-panel-hover); }
+        .cta:focus-visible { outline: 2px solid var(--c-primary); outline-offset: 2px; }
         .cta:disabled { opacity: 0.4; cursor: not-allowed; }
 
         .status-line {
           display: flex; align-items: center; justify-content: space-between;
           margin-top: 4px;
         }
-        .status-label { font-size: 13px; color: rgba(22,48,43,0.65); font-weight: 500; }
+        .status-label { font-size: 13px; color: rgba(var(--c-bg-rgb),0.65); font-weight: 500; }
         .status-value { font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 15px; }
 
         .turn-banner {
           margin-top: 22px;
           background: #B7472A;
-          color: #F1ECDA;
+          color: var(--c-light);
           border-radius: 14px;
           padding: 16px 18px;
           display: flex; align-items: center; gap: 10px;
@@ -2161,7 +2219,7 @@ const handleLogout = async () => {
 
         .board-panel {
           margin-top: 22px;
-          background: #0F211D;
+          background: var(--c-panel);
           border-radius: 18px;
           padding: 22px;
         }
@@ -2170,7 +2228,7 @@ const handleLogout = async () => {
           font-size: 11px;
           letter-spacing: 0.14em;
           text-transform: uppercase;
-          color: #9FB3AC;
+          color: var(--c-muted);
           margin-bottom: 12px;
         }
 
@@ -2181,7 +2239,7 @@ const handleLogout = async () => {
           gap: 8px;
         }
         .stat-box {
-          background: #16302B;
+          background: var(--c-bg);
           border-radius: 12px;
           padding: 10px 6px;
           text-align: center;
@@ -2190,11 +2248,11 @@ const handleLogout = async () => {
           font-family: 'IBM Plex Mono', monospace;
           font-weight: 700;
           font-size: 18px;
-          color: #C99A3E;
+          color: var(--c-primary);
         }
         .stat-lbl {
           font-size: 10.5px;
-          color: #9FB3AC;
+          color: var(--c-muted);
           margin-top: 2px;
         }
 
@@ -2237,8 +2295,8 @@ const handleLogout = async () => {
         .circle-btn.primary {
           width: 78px;
           height: 78px;
-          background: radial-gradient(circle at 35% 30%, #e6c073, #C99A3E 65%, #ab8333 100%);
-          box-shadow: 0 8px 18px rgba(201,154,62,0.45), 0 0 0 6px rgba(201,154,62,0.12);
+          background: radial-gradient(circle at 35% 30%, var(--c-primary-light), var(--c-primary) 65%, var(--c-primary-dark) 100%);
+          box-shadow: 0 8px 18px rgba(var(--c-primary-rgb),0.45), 0 0 0 6px rgba(var(--c-primary-rgb),0.12);
         }
         .circle-btn.secondary {
           width: 54px;
@@ -2251,11 +2309,11 @@ const handleLogout = async () => {
         .circle-btn-label {
           font-size: 11.5px;
           font-weight: 600;
-          color: #9FB3AC;
+          color: var(--c-muted);
           text-align: center;
         }
-        .circle-btn-label.primary { font-size: 13.5px; font-weight: 800; color: #F1ECDA; }
-        .circle-btn:focus-visible { outline: 2px solid #C99A3E; outline-offset: 2px; }
+        .circle-btn-label.primary { font-size: 13.5px; font-weight: 800; color: var(--c-light); }
+        .circle-btn:focus-visible { outline: 2px solid var(--c-primary); outline-offset: 2px; }
         @media (max-width: 360px) {
           .op-actions-circle { gap: 10px; }
           .circle-btn.primary { width: 68px; height: 68px; }
@@ -2272,15 +2330,15 @@ const handleLogout = async () => {
           font-family: 'IBM Plex Mono', monospace;
           font-size: 12px;
           font-weight: 600;
-          background: #16302B;
-          color: #9FB3AC;
+          background: var(--c-bg);
+          color: var(--c-muted);
           border-radius: 8px;
           padding: 5px 9px;
           white-space: nowrap;
           flex-shrink: 0;
         }
         .queue-chip-clickable {
-          border: 1px solid rgba(201,154,62,0.4);
+          border: 1px solid rgba(var(--c-primary-rgb),0.4);
           cursor: pointer;
         }
         .queue-chip-clickable:disabled {
@@ -2292,27 +2350,27 @@ const handleLogout = async () => {
           display: block;
           font-size: 11.5px;
           font-weight: 600;
-          color: #9FB3AC;
+          color: var(--c-muted);
           margin: 16px 0 6px;
         }
         .field-input {
           width: 100%;
-          background: #16302B;
-          border: 1px solid rgba(159,179,172,0.25);
+          background: var(--c-bg);
+          border: 1px solid rgba(var(--c-muted-rgb),0.25);
           border-radius: 10px;
           padding: 12px 13px;
-          color: #F1ECDA;
+          color: var(--c-light);
           font-family: 'IBM Plex Sans', sans-serif;
           font-size: 14px;
           box-sizing: border-box;
         }
         .ticket-field-input {
           width: 100%;
-          background: #FBF8EE;
-          border: 1px solid rgba(22,48,43,0.2);
+          background: var(--c-light);
+          border: 1px solid rgba(var(--c-bg-rgb),0.2);
           border-radius: 10px;
           padding: 12px 13px;
-          color: #16302B;
+          color: var(--c-bg);
           font-family: 'IBM Plex Sans', sans-serif;
           font-size: 14px;
           box-sizing: border-box;
@@ -2324,34 +2382,34 @@ const handleLogout = async () => {
         }
         .slot-grid { display: flex; flex-wrap: wrap; gap: 7px; justify-content: center; margin-top: 14px; }
         .slot-grid .chip {
-          border: 1px solid rgba(22,48,43,0.25);
+          border: 1px solid rgba(var(--c-bg-rgb),0.25);
           background: transparent;
-          color: #16302B;
+          color: var(--c-bg);
         }
-        .slot-grid .chip.active { background: #C99A3E; color: #16302B; border-color: #C99A3E; }
+        .slot-grid .chip.active { background: var(--c-primary); color: var(--c-bg); border-color: var(--c-primary); }
         .testo-grande .slot-grid .chip { font-size: 15px; padding: 9px 15px; }
-        .field-input::placeholder { color: rgba(159,179,172,0.5); }
-        .field-input:focus { outline: none; border-color: #C99A3E; }
+        .field-input::placeholder { color: rgba(var(--c-muted-rgb),0.5); }
+        .field-input:focus { outline: none; border-color: var(--c-primary); }
 
         .chip-row { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 2px; }
         .chip {
-          border: 1px solid rgba(159,179,172,0.3);
+          border: 1px solid rgba(var(--c-muted-rgb),0.3);
           background: transparent;
-          color: #9FB3AC;
+          color: var(--c-muted);
           border-radius: 999px;
           padding: 7px 13px;
           font-size: 12.5px;
           font-weight: 600;
           cursor: pointer;
         }
-        .chip.active { background: #C99A3E; color: #16302B; border-color: #C99A3E; }
+        .chip.active { background: var(--c-primary); color: var(--c-bg); border-color: var(--c-primary); }
 
         .url-chip {
           display: inline-flex;
           align-items: center;
           gap: 6px;
-          background: #16302B;
-          color: #C99A3E;
+          background: var(--c-bg);
+          color: var(--c-primary);
           font-family: 'IBM Plex Mono', monospace;
           font-size: 12px;
           font-weight: 600;
@@ -2360,7 +2418,7 @@ const handleLogout = async () => {
         }
 
         .stats-divider {
-          border-top: 1px solid rgba(159,179,172,0.15);
+          border-top: 1px solid rgba(var(--c-muted-rgb),0.15);
           margin: 22px 0 18px;
         }
 
@@ -2376,7 +2434,7 @@ const handleLogout = async () => {
           justify-content: space-between;
           font-family: 'IBM Plex Mono', monospace;
           font-size: 8.5px;
-          color: #9FB3AC;
+          color: var(--c-muted);
           text-align: right;
           padding-bottom: 12px;
         }
@@ -2394,10 +2452,10 @@ const handleLogout = async () => {
           justify-content: space-between;
         }
         .bar-chart-gridline {
-          border-top: 1px solid rgba(159,179,172,0.14);
+          border-top: 1px solid rgba(var(--c-muted-rgb),0.14);
         }
         .bar-chart-gridline:last-child {
-          border-top: 1px solid rgba(159,179,172,0.22);
+          border-top: 1px solid rgba(var(--c-muted-rgb),0.22);
         }
         .bar-chart-bars {
           position: relative;
@@ -2429,14 +2487,14 @@ const handleLogout = async () => {
           flex: 1;
           min-width: 2px;
           max-width: 5px;
-          background: #C99A3E;
+          background: var(--c-primary);
           border-radius: 2px 2px 0 0;
           transition: height 0.3s ease;
         }
         .bar-lbl {
           font-family: 'IBM Plex Mono', monospace;
           font-size: 7px;
-          color: #9FB3AC;
+          color: var(--c-muted);
           margin-top: 5px;
         }
         .bar-chart-legend {
@@ -2446,7 +2504,7 @@ const handleLogout = async () => {
           gap: 14px;
           margin-top: 12px;
           font-size: 10.5px;
-          color: #9FB3AC;
+          color: var(--c-muted);
         }
         .legend-item { display: inline-flex; align-items: center; gap: 5px; }
         .legend-dot { width: 8px; height: 8px; border-radius: 999px; display: inline-block; }
@@ -2456,26 +2514,26 @@ const handleLogout = async () => {
           display: flex;
           align-items: center;
           gap: 8px;
-          background: #16302B;
-          border: 1px solid rgba(159,179,172,0.25);
+          background: var(--c-bg);
+          border: 1px solid rgba(var(--c-muted-rgb),0.25);
           border-radius: 10px;
           padding: 11px 13px;
-          color: #9FB3AC;
+          color: var(--c-muted);
         }
         .search-input {
           flex: 1;
           background: transparent;
           border: none;
-          color: #F1ECDA;
+          color: var(--c-light);
           font-family: 'IBM Plex Sans', sans-serif;
           font-size: 13.5px;
         }
         .search-input:focus { outline: none; }
-        .search-input::placeholder { color: rgba(159,179,172,0.5); }
+        .search-input::placeholder { color: rgba(var(--c-muted-rgb),0.5); }
 
         .admin-list { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
         .admin-card {
-          background: #16302B;
+          background: var(--c-bg);
           border-radius: 12px;
           padding: 14px;
         }
@@ -2493,20 +2551,20 @@ const handleLogout = async () => {
         .admin-card-type {
           display: flex; align-items: center; gap: 4px;
           font-size: 11.5px;
-          color: #C99A3E;
+          color: var(--c-primary);
           margin-top: 2px;
         }
         .admin-card-row {
           display: flex; align-items: center; gap: 6px;
           font-size: 12px;
-          color: #9FB3AC;
+          color: var(--c-muted);
           margin-top: 6px;
         }
         .error-box {
           margin-top: 14px;
           background: rgba(183,71,42,0.15);
           border: 1px solid rgba(183,71,42,0.4);
-          color: #F1ECDA;
+          color: var(--c-light);
           border-radius: 10px;
           padding: 10px 12px;
           font-size: 12.5px;
@@ -2514,20 +2572,31 @@ const handleLogout = async () => {
       `}</style>
 
       <div className="wrap">
-        <div className="wordmark"><span className="dot" />Prossimo</div>
+        <div className="wordmark-row">
+          <div className="wordmark"><span className="dot" />Prossimo</div>
+          <button
+            type="button"
+            className="tema-toggle"
+            onClick={cambiaTema}
+            title={temaTeal ? "Passa al tema verde e oro" : "Passa al tema chiaro e teal"}
+            aria-label="Cambia schema colori"
+          >
+            <Palette size={16} />
+          </button>
+        </div>
 
         {installPrompt && !installNascosto && !arrivatoDaScansione && (
           <div style={{
             marginTop: 14,
-            background: "#0F211D",
+            background: "var(--c-panel)",
             borderRadius: 12,
             padding: "10px 12px",
             display: "flex",
             alignItems: "center",
             gap: 10,
           }}>
-            <Download size={16} color="#C99A3E" style={{ flexShrink: 0 }} />
-            <span style={{ flex: 1, fontSize: 12, color: "#F1ECDA" }}>Installa Prossimo sulla schermata Home</span>
+            <Download size={16} color="var(--c-primary)" style={{ flexShrink: 0 }} />
+            <span style={{ flex: 1, fontSize: 12, color: "var(--c-light)" }}>Installa Prossimo sulla schermata Home</span>
             <button
               className="cta primary"
               style={{ margin: 0, width: "auto", padding: "7px 12px", fontSize: 12, flexShrink: 0 }}
@@ -2541,7 +2610,7 @@ const handleLogout = async () => {
               style={{
                 background: "none",
                 border: "none",
-                color: "#9FB3AC",
+                color: "var(--c-muted)",
                 cursor: "pointer",
                 width: 36,
                 height: 36,
@@ -2604,7 +2673,7 @@ const handleLogout = async () => {
           {!activeBusiness ? (
             <div className="board-panel">
               <div className="board-label">Nessuna attivita' selezionata</div>
-              <p className="ticket-msg" style={{ color: "#9FB3AC" }}>
+              <p className="ticket-msg" style={{ color: "var(--c-muted)" }}>
                 Scansiona il QR code esposto nel locale per prendere il tuo numero.
               </p>
             </div>
@@ -2626,12 +2695,12 @@ const handleLogout = async () => {
             <div className="ticket" style={{ textAlign: "center" }}>
               <div className="eyebrow">{activeBusiness.name} — Cassa</div>
               <div style={{ margin: "18px 0 6px" }}>
-                <CalendarClock size={48} color="#16302B" style={{ margin: "0 auto" }} />
+                <CalendarClock size={48} color="var(--c-bg)" style={{ margin: "0 auto" }} />
               </div>
               <div className="ticket-title">
                 Prenotato per le {formatOrarioSlot(prenotazione.slotStart)}
               </div>
-              <p className="ticket-msg" style={{ color: "rgba(22,48,43,0.65)", marginTop: 8 }}>
+              <p className="ticket-msg" style={{ color: "rgba(var(--c-bg-rgb),0.65)", marginTop: 8 }}>
                 A quell'ora ti assegniamo in automatico un numero vero, nella stessa coda di chi si presenta di persona. Puoi anche chiudere questa pagina: basta riaprirla per vedere il tuo numero quando e' pronto.
               </p>
               <button className="cta ghost" onClick={annullaPrenotazioneCliente}>
@@ -2657,7 +2726,7 @@ const handleLogout = async () => {
                 ))}
               </div>
               {generaSlotDisponibili(activeBusiness, oraCorrente).length === 0 && (
-                <p className="ticket-msg-sm" style={{ color: "rgba(22,48,43,0.5)", marginTop: 10 }}>
+                <p className="ticket-msg-sm" style={{ color: "rgba(var(--c-bg-rgb),0.5)", marginTop: 10 }}>
                   Nessuna fascia oraria disponibile per oggi.
                 </p>
               )}
@@ -2682,15 +2751,15 @@ const handleLogout = async () => {
             <div className="ticket" style={{ textAlign: "center" }}>
               <div className="eyebrow">{activeBusiness.name} — Cassa</div>
               <div style={{ margin: "18px 0 6px" }}>
-                <Clock size={48} color="#16302B" style={{ margin: "0 auto" }} />
+                <Clock size={48} color="var(--c-bg)" style={{ margin: "0 auto" }} />
               </div>
               <div className="ticket-title">
                 Grazie per essere passato/a!
               </div>
-              <p className="ticket-msg" style={{ color: "rgba(22,48,43,0.65)", marginTop: 8 }}>
+              <p className="ticket-msg" style={{ color: "rgba(var(--c-bg-rgb),0.65)", marginTop: 8 }}>
                 Al momento siamo chiusi. {statoOrari.prossimaAperturaLabel}.
               </p>
-              <p className="ticket-msg-sm" style={{ color: "rgba(22,48,43,0.5)", marginTop: 6 }}>
+              <p className="ticket-msg-sm" style={{ color: "rgba(var(--c-bg-rgb),0.5)", marginTop: 6 }}>
                 Orario: {formatOra(statoOrari.apertura)}–{formatOra(statoOrari.chiusura)}
               </p>
             </div>
@@ -2698,9 +2767,9 @@ const handleLogout = async () => {
             <div className="ticket" style={{ textAlign: "center" }}>
               <div className="eyebrow">{activeBusiness.name} — {activeReparto ? activeReparto.nome : "Cassa"}</div>
               <div style={{ margin: "18px 0 6px" }}>
-                <QrCode size={64} color="#16302B" style={{ margin: "0 auto" }} />
+                <QrCode size={64} color="var(--c-bg)" style={{ margin: "0 auto" }} />
               </div>
-              <p className="ticket-msg" style={{ color: "rgba(22,48,43,0.65)", marginTop: 10 }}>
+              <p className="ticket-msg" style={{ color: "rgba(var(--c-bg-rgb),0.65)", marginTop: 10 }}>
                 Tocca il pulsante per prendere il tuo numero.
               </p>
               <button className="cta primary" onClick={prendiNumero}>
@@ -2747,13 +2816,13 @@ const handleLogout = async () => {
                 </div>
               )}
               {isNext && !isMyTurn && (
-                <div className="turn-banner" style={{ background: "#C99A3E", color: "#16302B" }}>
+                <div className="turn-banner" style={{ background: "var(--c-primary)", color: "var(--c-bg)" }}>
                   <Clock size={20} />
                   Preparati, tocca a te tra poco
                 </div>
               )}
 		{giaServito && (
-                <div className="turn-banner" style={{ background: "#0F211D", color: "#F1ECDA" }}>
+                <div className="turn-banner" style={{ background: "var(--c-panel)", color: "var(--c-light)" }}>
                   <CheckCircle2 size={20} />
                   Grazie per essere stato da noi
                 </div>
@@ -2770,7 +2839,7 @@ const handleLogout = async () => {
                         onClick={() => setFeedbackBozza({ ticket: myTicket, valutazione: n, commento: feedbackCommento })}
                         style={{ background: "none", border: "none", padding: 4, cursor: "pointer" }}
                       >
-                        <Star size={28} color="#C99A3E" fill={feedbackValutazione && n <= feedbackValutazione ? "#C99A3E" : "none"} />
+                        <Star size={28} color="var(--c-primary)" fill={feedbackValutazione && n <= feedbackValutazione ? "var(--c-primary)" : "none"} />
                       </button>
                     ))}
                   </div>
@@ -2805,7 +2874,7 @@ const handleLogout = async () => {
                     </a>
                   </div>
                 ) : (
-                  <p style={{ fontSize: 12.5, color: "#9FB3AC", marginTop: 12, textAlign: "center" }}>
+                  <p style={{ fontSize: 12.5, color: "var(--c-muted)", marginTop: 12, textAlign: "center" }}>
                     Grazie per il tuo feedback!
                   </p>
                 )
@@ -2817,7 +2886,7 @@ const handleLogout = async () => {
               )}
               {!giaServito && !activeReparto && (activeBusiness.sms_abilitato || activeBusiness.whatsapp_abilitato) && (smsAttivo || pianoConsenteBusiness) && (
                 smsAttivo ? (
-                  <p className="ticket-msg-sm" style={{ color: "rgba(22,48,43,0.65)", marginTop: 12, textAlign: "center" }}>
+                  <p className="ticket-msg-sm" style={{ color: "rgba(var(--c-bg-rgb),0.65)", marginTop: 12, textAlign: "center" }}>
                     <MessageSquare size={13} style={{ display: "inline", marginRight: 4, position: "relative", top: -1 }} />
                     Ti avviseremo via {canaleTesto === "whatsapp" ? "WhatsApp" : "SMS"} al {telefonoSms}
                   </p>
@@ -2868,7 +2937,7 @@ const handleLogout = async () => {
             <div className="board-panel">
               <div className="board-label">Le tue attivita'</div>
               {mieAttivitaList.length === 0 ? (
-                <p style={{ fontSize: 13, color: "#9FB3AC" }}>
+                <p style={{ fontSize: 13, color: "var(--c-muted)" }}>
                   Non hai ancora nessuna attivita'. Vai su "Crea Attività" per crearne una, oppure inserisci un codice invito qui sotto.
                 </p>
               ) : (
@@ -2884,8 +2953,8 @@ const handleLogout = async () => {
                       </div>
 
                       {attivitaDaInvitare === b.id && b.ruolo === "proprietario" && (
-                        <div style={{ marginTop: 10, padding: 10, background: "#16302B", borderRadius: 10 }}>
-                          <div style={{ fontSize: 11, color: "#9FB3AC", marginBottom: 6 }}>Codice invito operatore</div>
+                        <div style={{ marginTop: 10, padding: 10, background: "var(--c-bg)", borderRadius: 10 }}>
+                          <div style={{ fontSize: 11, color: "var(--c-muted)", marginBottom: 6 }}>Codice invito operatore</div>
                           <div className="url-chip">{b.invite_code}</div>
                           <button
                             className="cta ghost"
@@ -2895,10 +2964,10 @@ const handleLogout = async () => {
                             Condividi link invito
                           </button>
 
-                          <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid rgba(159,179,172,0.15)" }}>
-                            <div style={{ fontSize: 11, color: "#9FB3AC", marginBottom: 6 }}>Staff attuale</div>
+                          <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid rgba(var(--c-muted-rgb),0.15)" }}>
+                            <div style={{ fontSize: 11, color: "var(--c-muted)", marginBottom: 6 }}>Staff attuale</div>
                             {staffList.length === 0 ? (
-                              <p style={{ fontSize: 12, color: "#9FB3AC" }}>Nessun operatore invitato per ora.</p>
+                              <p style={{ fontSize: 12, color: "var(--c-muted)" }}>Nessun operatore invitato per ora.</p>
                             ) : (
                               staffList.map((s) => (
                                 <div key={s.user_id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "6px 0" }}>
@@ -2938,7 +3007,7 @@ const handleLogout = async () => {
                               Staff
                             </button>
                           )}
-                          <button className="cta" style={{ flex: 1, minWidth: 0, background: "#C0392B", color: "#F1ECDA", border: "none" }} onClick={() => handleElimina(b)}>
+                          <button className="cta" style={{ flex: 1, minWidth: 0, background: "#C0392B", color: "var(--c-light)", border: "none" }} onClick={() => handleElimina(b)}>
                             Elimina
                           </button>
                         </div>
@@ -2948,7 +3017,7 @@ const handleLogout = async () => {
                 </div>
               )}
 
-              <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid rgba(241,236,218,0.12)" }}>
+              <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid rgba(var(--c-light-rgb),0.12)" }}>
                 <label className="field-label" style={{ marginTop: 0 }}>Hai un codice invito?</label>
                 <form onSubmit={handleUnisciAttivita} style={{ display: "flex", gap: 8 }}>
                   <input
@@ -2971,15 +3040,15 @@ const handleLogout = async () => {
             </div>
           ) : (
             <div className="board-panel">
-              <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid rgba(241,236,218,0.12)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid rgba(var(--c-light-rgb),0.12)" }}>
                 <QRCodeSVG
                   value={`${window.location.origin}/coda/${activeBusiness.slug}`}
                   size={64}
-                  bgColor="#F1ECDA"
-                  fgColor="#16302B"
+                  bgColor="var(--c-light)"
+                  fgColor="var(--c-bg)"
                 />
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 11.5, color: "#9FB3AC", marginBottom: 6 }}>QR della tua coda</div>
+                  <div style={{ fontSize: 11.5, color: "var(--c-muted)", marginBottom: 6 }}>QR della tua coda</div>
                   <div style={{ display: "flex", gap: 8 }}>
                     <button className="cta ghost" style={{ fontSize: 12.5, padding: "6px 10px" }} onClick={() => condividiQrPdf(activeBusiness)}>
                       Condividi link
@@ -3006,7 +3075,7 @@ const handleLogout = async () => {
               )}
 
               {repartiBusiness.length > 0 && pianoConsentePro && !activeReparto ? (
-                <p style={{ fontSize: 13, color: "#9FB3AC" }}>
+                <p style={{ fontSize: 13, color: "var(--c-muted)" }}>
                   Scegli un reparto qui sopra per iniziare a gestirlo.
                 </p>
               ) : (
@@ -3017,7 +3086,7 @@ const handleLogout = async () => {
                   <FlapNumber value={currentOggi} size="lg" />
 
                   {!activeReparto && activeBusiness.chiamata_prioritaria != null && (
-                    <div className="turn-banner" style={{ background: "#C99A3E", color: "#16302B", flexDirection: "column", alignItems: "stretch", gap: 10 }}>
+                    <div className="turn-banner" style={{ background: "var(--c-primary)", color: "var(--c-bg)", flexDirection: "column", alignItems: "stretch", gap: 10 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         <Bell size={20} />
                         Chiamata prioritaria: #{activeBusiness.chiamata_prioritaria - baselineOggi}
@@ -3026,7 +3095,7 @@ const handleLogout = async () => {
                         <button className="cta dark" onClick={confermaPrioritarioServito}>
                           <CheckCircle2 size={16} /> Servito
                         </button>
-                        <button className="cta" style={{ margin: 0, background: "transparent", color: "#16302B", border: "1px solid rgba(22,48,43,0.35)" }} onClick={annullaChiamataPrioritaria}>
+                        <button className="cta" style={{ margin: 0, background: "transparent", color: "var(--c-bg)", border: "1px solid rgba(var(--c-bg-rgb),0.35)" }} onClick={annullaChiamataPrioritaria}>
                           <X size={16} /> Annulla
                         </button>
                       </div>
@@ -3034,7 +3103,7 @@ const handleLogout = async () => {
                   )}
 
                   {allertaCodaLunga && (
-                    <div className="turn-banner" style={{ background: "#B7472A", color: "#F1ECDA" }}>
+                    <div className="turn-banner" style={{ background: "#B7472A", color: "var(--c-light)" }}>
                       <AlertTriangle size={20} />
                       <div>
                         Coda lunga:{" "}
@@ -3110,10 +3179,10 @@ const handleLogout = async () => {
                         #{currentOggi + i + 1}
                       </button>
                     ))}
-                    {inCoda === 0 && <span style={{ fontSize: 13, color: "#9FB3AC" }}>Nessuno in coda al momento.</span>}
+                    {inCoda === 0 && <span style={{ fontSize: 13, color: "var(--c-muted)" }}>Nessuno in coda al momento.</span>}
                   </div>
                   {!activeReparto && inCoda > 0 && pianoConsentePro && (
-                    <p style={{ fontSize: 11, color: "#9FB3AC", marginTop: 6 }}>
+                    <p style={{ fontSize: 11, color: "var(--c-muted)", marginTop: 6 }}>
                       Tocca un numero per chiamarlo subito con priorita', fuori ordine.
                     </p>
                   )}
@@ -3165,14 +3234,14 @@ const handleLogout = async () => {
                     <button className="cta dark" style={{ flex: 1, minWidth: 0 }} onClick={() => avviaModifica(b, "admin")}>
                       Modifica
                     </button>
-                    <button className="cta" style={{ flex: 1, minWidth: 0, background: "#C0392B", color: "#F1ECDA", border: "none" }} onClick={() => handleElimina(b)}>
+                    <button className="cta" style={{ flex: 1, minWidth: 0, background: "#C0392B", color: "var(--c-light)", border: "none" }} onClick={() => handleElimina(b)}>
                       Elimina
                     </button>
                   </div>
                 </div>
               ))}
               {businesses.length === 0 && (
-                <p style={{ fontSize: 13, color: "#9FB3AC", textAlign: "center", marginTop: 20 }}>
+                <p style={{ fontSize: 13, color: "var(--c-muted)", textAlign: "center", marginTop: 20 }}>
                   Nessuna attivita' corrisponde alla ricerca.
                 </p>
               )}
@@ -3223,9 +3292,9 @@ const handleLogout = async () => {
                     Email {u.email_confermata ? "confermata" : "non confermata"}
                   </div>
                   {(attivitaPerProprietario[u.id] || []).map((b) => (
-                    <div key={b.id} style={{ marginTop: 10, padding: 10, background: "#0F211D", borderRadius: 10 }}>
+                    <div key={b.id} style={{ marginTop: 10, padding: 10, background: "var(--c-panel)", borderRadius: 10 }}>
                       <div style={{ fontSize: 12.5, fontWeight: 700 }}>{b.name}</div>
-                      <div style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: 4, display: "flex", alignItems: "center", gap: 5 }}>
+                      <div style={{ fontSize: 11.5, color: "var(--c-muted)", marginTop: 4, display: "flex", alignItems: "center", gap: 5 }}>
                         <Clock size={11} /> {formatOra(b.ora_apertura ?? 9)}–{formatOra(b.ora_chiusura ?? 20)} · {formatGiorniApertura(b.giorni_apertura)}
                       </div>
                       <button
@@ -3238,13 +3307,13 @@ const handleLogout = async () => {
                     </div>
                   ))}
                   {u.id === currentUser?.id ? (
-                    <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: 10 }}>Il tuo account</p>
+                    <p style={{ fontSize: 11.5, color: "var(--c-muted)", marginTop: 10 }}>Il tuo account</p>
                   ) : (
                     <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                       <button className="cta dark" style={{ flex: 1, minWidth: 0 }} onClick={() => handleModificaEmailUtente(u)}>
                         Modifica email
                       </button>
-                      <button className="cta" style={{ flex: 1, minWidth: 0, background: "#C0392B", color: "#F1ECDA", border: "none" }} onClick={() => handleEliminaUtente(u)}>
+                      <button className="cta" style={{ flex: 1, minWidth: 0, background: "#C0392B", color: "var(--c-light)", border: "none" }} onClick={() => handleEliminaUtente(u)}>
                         Elimina
                       </button>
                     </div>
@@ -3252,7 +3321,7 @@ const handleLogout = async () => {
                 </div>
               ))}
               {utenti.length === 0 && (
-                <p style={{ fontSize: 13, color: "#9FB3AC", textAlign: "center", marginTop: 20 }}>
+                <p style={{ fontSize: 13, color: "var(--c-muted)", textAlign: "center", marginTop: 20 }}>
                   Nessun utente corrisponde alla ricerca.
                 </p>
               )}
@@ -3267,7 +3336,7 @@ const handleLogout = async () => {
               {activeBusiness ? activeBusiness.name : "Statistiche"}
             </div>
             {!activeBusiness ? (
-              <p style={{ fontSize: 13, color: "#9FB3AC", marginTop: 10 }}>
+              <p style={{ fontSize: 13, color: "var(--c-muted)", marginTop: 10 }}>
                 Seleziona un'attivita' da "Le mie attivita'" per vederne le statistiche.
               </p>
             ) : (
@@ -3290,7 +3359,7 @@ const handleLogout = async () => {
                   >
                     <ChevronLeft size={16} />
                   </button>
-                  <span style={{ fontSize: 12.5, color: "#9FB3AC", fontWeight: 600 }}>
+                  <span style={{ fontSize: 12.5, color: "var(--c-muted)", fontWeight: 600 }}>
                     {etichettaPeriodo(statsPeriodPage, statsOffset)}
                   </span>
                   <button
@@ -3322,7 +3391,7 @@ const handleLogout = async () => {
                     </button>
                   </div>
                 ) : (
-                  <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: 14 }}>
+                  <p style={{ fontSize: 11.5, color: "var(--c-muted)", marginTop: 14 }}>
                     Export Excel/PDF non incluso nel piano Gratis — attivalo separatamente (+€5/mese) o passa a Pro dalla scheda "Il mio piano".
                   </p>
                 )}
@@ -3350,11 +3419,11 @@ const handleLogout = async () => {
                   labels={andamentoStats.labels}
                   chiusi={giorniChiusiSettimana}
                   series={[
-                    { name: "Serviti", data: andamentoStats.serviti, color: "#C99A3E" },
+                    { name: "Serviti", data: andamentoStats.serviti, color: "var(--c-primary)" },
                     { name: "Non presentati", data: andamentoStats.nonPresentati, color: "#B7472A" },
                   ]}
                 />
-                <p style={{ fontSize: 11, color: "#9FB3AC", marginTop: 10, textAlign: "center" }}>
+                <p style={{ fontSize: 11, color: "var(--c-muted)", marginTop: 10, textAlign: "center" }}>
                   Per fascia del periodo selezionato
                 </p>
 
@@ -3366,7 +3435,7 @@ const handleLogout = async () => {
                     { name: "Attesa media (min)", data: andamentoStats.attesaMedia, color: "#5C87A6" },
                   ]}
                 />
-                <p style={{ fontSize: 11, color: "#9FB3AC", marginTop: 10, textAlign: "center" }}>
+                <p style={{ fontSize: 11, color: "var(--c-muted)", marginTop: 10, textAlign: "center" }}>
                   Per fascia del periodo selezionato
                 </p>
 
@@ -3374,13 +3443,13 @@ const handleLogout = async () => {
 
                 <div className="board-label">Per operatore</div>
                 {statsPerOperatore.length === 0 ? (
-                  <p style={{ fontSize: 12.5, color: "#9FB3AC" }}>Nessun ticket gestito in questo periodo.</p>
+                  <p style={{ fontSize: 12.5, color: "var(--c-muted)" }}>Nessun ticket gestito in questo periodo.</p>
                 ) : (
                   <div className="admin-list">
                     {statsPerOperatore.map((op) => (
                       <div className="admin-card" key={op.user_id} style={{ padding: 12 }}>
                         <div style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{op.email}</div>
-                        <div style={{ fontSize: 12, color: "#9FB3AC", marginTop: 4 }}>
+                        <div style={{ fontSize: 12, color: "var(--c-muted)", marginTop: 4 }}>
                           {op.serviti} serviti · {op.non_presentati} non presentati ({percentualeNonPresenti(op.serviti, op.non_presentati)}%)
                         </div>
                       </div>
@@ -3392,16 +3461,16 @@ const handleLogout = async () => {
 
                 <div className="board-label"><Star size={13} style={{ display: "inline", marginRight: 6, position: "relative", top: -1 }} />Feedback clienti</div>
                 {statsFeedback.conteggio === 0 ? (
-                  <p style={{ fontSize: 12.5, color: "#9FB3AC" }}>Nessun feedback in questo periodo.</p>
+                  <p style={{ fontSize: 12.5, color: "var(--c-muted)" }}>Nessun feedback in questo periodo.</p>
                 ) : (
                   <>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
                       <div style={{ display: "flex" }}>
                         {[1, 2, 3, 4, 5].map((n) => (
-                          <Star key={n} size={16} color="#C99A3E" fill={n <= Math.round(statsFeedback.media) ? "#C99A3E" : "none"} />
+                          <Star key={n} size={16} color="var(--c-primary)" fill={n <= Math.round(statsFeedback.media) ? "var(--c-primary)" : "none"} />
                         ))}
                       </div>
-                      <span style={{ fontSize: 12.5, color: "#9FB3AC" }}>
+                      <span style={{ fontSize: 12.5, color: "var(--c-muted)" }}>
                         {statsFeedback.media.toFixed(1)} su 5 ({statsFeedback.conteggio} {statsFeedback.conteggio === 1 ? "valutazione" : "valutazioni"})
                       </span>
                     </div>
@@ -3411,11 +3480,11 @@ const handleLogout = async () => {
                           <div className="admin-card" key={i} style={{ padding: 12 }}>
                             <div style={{ display: "flex", gap: 2 }}>
                               {[1, 2, 3, 4, 5].map((n) => (
-                                <Star key={n} size={12} color="#C99A3E" fill={n <= f.valutazione ? "#C99A3E" : "none"} />
+                                <Star key={n} size={12} color="var(--c-primary)" fill={n <= f.valutazione ? "var(--c-primary)" : "none"} />
                               ))}
                             </div>
                             <div style={{ fontSize: 12.5, marginTop: 6 }}>{f.commento}</div>
-                            <div style={{ fontSize: 11, color: "#9FB3AC", marginTop: 4 }}>{formatData(f.created_at)}</div>
+                            <div style={{ fontSize: 11, color: "var(--c-muted)", marginTop: 4 }}>{formatData(f.created_at)}</div>
                           </div>
                         ))}
                       </div>
@@ -3471,7 +3540,7 @@ const handleLogout = async () => {
                       <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>
                     ))}
                   </select>
-                  <span style={{ color: "#9FB3AC", fontSize: 13 }}>—</span>
+                  <span style={{ color: "var(--c-muted)", fontSize: 13 }}>—</span>
                   <select
                     className="field-input"
                     value={formOraChiusura}
@@ -3497,7 +3566,7 @@ const handleLogout = async () => {
                 </div>
 
                 <label className="field-label">Avviso coda lunga (opzionale)</label>
-                <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: -4, marginBottom: 8 }}>
+                <p style={{ fontSize: 11.5, color: "var(--c-muted)", marginTop: -4, marginBottom: 8 }}>
                   Se superata, nel pannello operatore compare un avviso. Lascia vuoto per disattivare.
                 </p>
                 <div style={{ display: "flex", gap: 10 }}>
@@ -3524,7 +3593,7 @@ const handleLogout = async () => {
                 </div>
 
                 <label className="field-label"><Monitor size={13} style={{ display: "inline", marginRight: 5, position: "relative", top: -1 }} />Schermo per i clienti</label>
-                <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: -4, marginBottom: 8 }}>
+                <p style={{ fontSize: 11.5, color: "var(--c-muted)", marginTop: -4, marginBottom: 8 }}>
                   Una pagina pubblica da aprire su uno schermo in negozio: mostra chi si sta servendo, quante persone sono in coda e l'attesa media.
                 </p>
                 <div className="chip-row">
@@ -3552,7 +3621,7 @@ const handleLogout = async () => {
                   </>
                 )}
                 {formSchermoAbilitato && repartiInModifica.length > 0 && (
-                  <p style={{ fontSize: 11.5, color: "#C99A3E", marginTop: 8 }}>
+                  <p style={{ fontSize: 11.5, color: "var(--c-primary)", marginTop: 8 }}>
                     Con i reparti attivi lo schermo mostra ancora il numero dell'attivita' nel suo insieme, non aggiornato dai reparti: per ora resta fermo. Aggiornamento per reparto in arrivo.
                   </p>
                 )}
@@ -3560,7 +3629,7 @@ const handleLogout = async () => {
                 {formPianoConsenteBusiness ? (
                   <>
                     <label className="field-label"><MessageSquare size={13} style={{ display: "inline", marginRight: 5, position: "relative", top: -1 }} />Avviso via SMS ai clienti</label>
-                    <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: -4, marginBottom: 8 }}>
+                    <p style={{ fontSize: 11.5, color: "var(--c-muted)", marginTop: -4, marginBottom: 8 }}>
                       In alternativa alla notifica push, i clienti potranno lasciare un numero di telefono per essere avvisati via SMS. Richiede un provider SMS a pagamento gia' configurato (costo per messaggio inviato) — attivalo solo dopo aver completato quella configurazione.
                     </p>
                     <div className="chip-row">
@@ -3569,7 +3638,7 @@ const handleLogout = async () => {
                     </div>
 
                     <label className="field-label"><MessageSquare size={13} style={{ display: "inline", marginRight: 5, position: "relative", top: -1 }} />Avviso via WhatsApp ai clienti</label>
-                    <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: -4, marginBottom: 8 }}>
+                    <p style={{ fontSize: 11.5, color: "var(--c-muted)", marginTop: -4, marginBottom: 8 }}>
                       Come l'SMS, ma su WhatsApp — di solito piu' economico e con piu' probabilita' di essere letto. Richiede un WhatsApp Sender configurato su Twilio: finche' e' in fase di test (Sandbox), riceve i messaggi solo chi si e' "unito" al Sandbox da telefono, non un cliente qualsiasi — attivalo per i clienti veri solo dopo aver completato la verifica.
                     </p>
                     <div className="chip-row">
@@ -3578,7 +3647,7 @@ const handleLogout = async () => {
                     </div>
                   </>
                 ) : (
-                  <p style={{ fontSize: 11.5, color: "#9FB3AC" }}>
+                  <p style={{ fontSize: 11.5, color: "var(--c-muted)" }}>
                     Avviso via SMS/WhatsApp ai clienti disponibile dal piano Business.
                   </p>
                 )}
@@ -3586,7 +3655,7 @@ const handleLogout = async () => {
                 {formPianoConsentePro ? (
                   <>
                     <label className="field-label"><Clock size={13} style={{ display: "inline", marginRight: 5, position: "relative", top: -1 }} />Prenotazione fascia oraria</label>
-                    <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: -4, marginBottom: 8 }}>
+                    <p style={{ fontSize: 11.5, color: "var(--c-muted)", marginTop: -4, marginBottom: 8 }}>
                       I clienti potranno prenotare un orario piu' tardi nella stessa giornata invece di dover scansionare il QR sul posto: al momento prenotato ricevono in automatico un numero vero, nella stessa coda di chi si presenta di persona.
                     </p>
                     <div className="chip-row">
@@ -3609,7 +3678,7 @@ const handleLogout = async () => {
                     )}
 
                     <label className="field-label"><Star size={13} style={{ display: "inline", marginRight: 5, position: "relative", top: -1 }} />Feedback dopo il servizio</label>
-                    <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: -4, marginBottom: 8 }}>
+                    <p style={{ fontSize: 11.5, color: "var(--c-muted)", marginTop: -4, marginBottom: 8 }}>
                       Dopo essere stato servito, al cliente viene chiesta una valutazione da 1 a 5. Se e' alta (4-5) e qui sotto hai messo il link alle tue recensioni Google, gli viene proposto di lasciarla anche li'; se e' bassa, gli viene chiesto un commento privato — mai pubblicato, lo vedi solo tu nelle Statistiche.
                     </p>
                     <div className="chip-row">
@@ -3625,14 +3694,14 @@ const handleLogout = async () => {
                           value={formGoogleReviewUrl}
                           onChange={(e) => setFormGoogleReviewUrl(e.target.value)}
                         />
-                        <p style={{ fontSize: 11, color: "#9FB3AC", marginTop: 4 }}>
+                        <p style={{ fontSize: 11, color: "var(--c-muted)", marginTop: 4 }}>
                           Lo trovi sulla tua Scheda Google Business, sotto "Ottieni altre recensioni" — un link tipo google.com/maps/place/... o g.page/r/.../review. Senza questo link, al cliente viene mostrato solo il ringraziamento.
                         </p>
                       </div>
                     )}
                   </>
                 ) : (
-                  <p style={{ fontSize: 11.5, color: "#9FB3AC" }}>
+                  <p style={{ fontSize: 11.5, color: "var(--c-muted)" }}>
                     Prenotazioni e feedback post-servizio disponibili dal piano Pro.
                   </p>
                 )}
@@ -3640,7 +3709,7 @@ const handleLogout = async () => {
                 {attivitaInModifica && (
                   <>
                     <label className="field-label"><CreditCard size={13} style={{ display: "inline", marginRight: 5, position: "relative", top: -1 }} />Il mio piano</label>
-                    <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: -4, marginBottom: 8 }}>
+                    <p style={{ fontSize: 11.5, color: "var(--c-muted)", marginTop: -4, marginBottom: 8 }}>
                       Piano attuale: <strong>{{ gratis: "Gratis", pro: "Pro", business: "Business" }[attivitaInModifica.piano || "gratis"]}</strong>
                     </p>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
@@ -3670,7 +3739,7 @@ const handleLogout = async () => {
 
                     {(attivitaInModifica.piano || "gratis") === "gratis" && (
                       <>
-                        <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: -10, marginBottom: 8 }}>
+                        <p style={{ fontSize: 11.5, color: "var(--c-muted)", marginTop: -10, marginBottom: 8 }}>
                           Sul piano Gratis le statistiche restano visibili fino a 12 mesi indietro, ma senza export. {attivitaInModifica.export_abilitato ? "Hai già l'export attivo." : "Puoi sbloccare l'export Excel/PDF separatamente:"}
                         </p>
                         {!attivitaInModifica.export_abilitato && (
@@ -3688,13 +3757,13 @@ const handleLogout = async () => {
                     )}
 
                     {(attivitaInModifica.piano || "gratis") === "gratis" ? (
-                      <p style={{ fontSize: 11.5, color: "#9FB3AC" }}>
+                      <p style={{ fontSize: 11.5, color: "var(--c-muted)" }}>
                         Reparti, chiamata prioritaria, prenotazioni, staff multipli e feedback sono disponibili dal piano Pro — vedi sopra "Il mio piano".
                       </p>
                     ) : (
                       <>
                         <label className="field-label"><LayoutGrid size={13} style={{ display: "inline", marginRight: 5, position: "relative", top: -1 }} />Reparti (code multiple)</label>
-                        <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: -4, marginBottom: 8 }}>
+                        <p style={{ fontSize: 11.5, color: "var(--c-muted)", marginTop: -4, marginBottom: 8 }}>
                           Servizi distinti con numerazione indipendente (es. "Cassa" e "Ritiro ordini"). Senza reparti l'attivita' continua a funzionare con un'unica coda, come oggi. Prenotazione fascia oraria, SMS e chiamata prioritaria restano per ora legati all'attivita' nel suo insieme, non al singolo reparto.
                         </p>
                         {repartiInModifica.map((r) => (
@@ -3756,7 +3825,7 @@ const handleLogout = async () => {
                     Annulla
                   </button>
                 ) : (
-                  <p style={{ fontSize: 11.5, color: "#9FB3AC", marginTop: 10, textAlign: "center" }}>
+                  <p style={{ fontSize: 11.5, color: "var(--c-muted)", marginTop: 10, textAlign: "center" }}>
                     Ogni attivita' ottiene un QR code univoco collegato alla propria coda.
                   </p>
                 )}
@@ -3771,15 +3840,15 @@ const handleLogout = async () => {
                     {activeBusiness.name}
                   </div>
                   {activeBusiness.address && (
-                    <div style={{ fontSize: 12.5, color: "rgba(22,48,43,0.6)", marginTop: 2 }}>{activeBusiness.address}</div>
+                    <div style={{ fontSize: 12.5, color: "rgba(var(--c-bg-rgb),0.6)", marginTop: 2 }}>{activeBusiness.address}</div>
                   )}
 
                   <div style={{ display: "flex", justifyContent: "center", margin: "16px 0" }}>
                     <QRCodeSVG
                       value={`${window.location.origin}/coda/${activeBusiness.slug}`}
                       size={160}
-                      bgColor="#F1ECDA"
-                      fgColor="#16302B"
+                      bgColor="var(--c-light)"
+                      fgColor="var(--c-bg)"
                     />
                   </div>
 
@@ -3787,7 +3856,7 @@ const handleLogout = async () => {
                     <Link2 size={13} />
                     tuapp.it/coda/{activeBusiness.slug}
                   </div>
-                  <p style={{ fontSize: 11.5, color: "rgba(22,48,43,0.55)", marginTop: 10 }}>
+                  <p style={{ fontSize: 11.5, color: "rgba(var(--c-bg-rgb),0.55)", marginTop: 10 }}>
                     Stampa questo QR ed esponilo in cassa: ogni scansione apre la coda di "{activeBusiness.name}".
                   </p>
                 </div>
@@ -3806,7 +3875,7 @@ const handleLogout = async () => {
           </div>
         )}
 
-        <div style={{ marginTop: 18, textAlign: "center", fontSize: 11.5, color: "rgba(241,236,218,0.35)" }}>
+        <div style={{ marginTop: 18, textAlign: "center", fontSize: 11.5, color: "rgba(var(--c-light-rgb),0.35)" }}>
           <CheckCircle2 size={12} style={{ display: "inline", marginRight: 4, position: "relative", top: -1 }} />
           Collegato a Supabase — dati reali e sincronizzati in tempo reale
         </div>
