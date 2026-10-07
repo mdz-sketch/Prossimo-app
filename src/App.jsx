@@ -2210,6 +2210,58 @@ const handleLogout = async () => {
           line-height: 1.25;
         }
 
+        .op-actions-circle {
+          display: flex;
+          align-items: flex-end;
+          justify-content: center;
+          gap: 18px;
+          margin-top: 18px;
+        }
+        .circle-btn-wrap {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 8px;
+          min-width: 0;
+        }
+        .circle-btn {
+          border: none;
+          border-radius: 999px;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+        .circle-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .circle-btn.primary {
+          width: 78px;
+          height: 78px;
+          background: radial-gradient(circle at 35% 30%, #e6c073, #C99A3E 65%, #ab8333 100%);
+          box-shadow: 0 8px 18px rgba(201,154,62,0.45), 0 0 0 6px rgba(201,154,62,0.12);
+        }
+        .circle-btn.secondary {
+          width: 54px;
+          height: 54px;
+          background: transparent;
+          border: 2.5px solid currentColor;
+        }
+        .circle-btn.secondary.teal { color: #5FA9A0; }
+        .circle-btn.secondary.red { color: #C96B4A; }
+        .circle-btn-label {
+          font-size: 11.5px;
+          font-weight: 600;
+          color: #9FB3AC;
+          text-align: center;
+        }
+        .circle-btn-label.primary { font-size: 13.5px; font-weight: 800; color: #F1ECDA; }
+        .circle-btn:focus-visible { outline: 2px solid #C99A3E; outline-offset: 2px; }
+        @media (max-width: 360px) {
+          .op-actions-circle { gap: 10px; }
+          .circle-btn.primary { width: 68px; height: 68px; }
+          .circle-btn.secondary { width: 46px; height: 46px; }
+        }
+
         .queue-strip {
           margin-top: 16px;
           display: flex;
@@ -2999,16 +3051,25 @@ const handleLogout = async () => {
                     </button>
                   )}
 
-                  <div className="op-actions">
-                    <button className="cta primary" onClick={avanti} disabled={inCoda === 0}>
-                      <ArrowRight size={16} /> Avanti
-                    </button>
-                    <button className="cta dark" onClick={richiama} disabled={current === 0} title="Torna al numero precedente">
-                      <RotateCcw size={16} /> Richiama
-                    </button>
-                    <button className="cta dark" onClick={nonPresente} disabled={inCoda === 0} title="Il cliente non si e' presentato">
-                      <SkipForward size={16} /> Assente
-                    </button>
+                  <div className="op-actions-circle">
+                    <div className="circle-btn-wrap">
+                      <button className="circle-btn secondary teal" onClick={richiama} disabled={current === 0} title="Torna al numero precedente" aria-label="Richiama">
+                        <RotateCcw size={20} />
+                      </button>
+                      <span className="circle-btn-label">Richiama</span>
+                    </div>
+                    <div className="circle-btn-wrap">
+                      <button className="circle-btn primary" onClick={avanti} disabled={inCoda === 0} aria-label="Avanti">
+                        <ArrowRight size={26} />
+                      </button>
+                      <span className="circle-btn-label primary">Avanti</span>
+                    </div>
+                    <div className="circle-btn-wrap">
+                      <button className="circle-btn secondary red" onClick={nonPresente} disabled={inCoda === 0} title="Il cliente non si e' presentato" aria-label="Assente">
+                        <SkipForward size={20} />
+                      </button>
+                      <span className="circle-btn-label">Assente</span>
+                    </div>
                   </div>
 
                   {!activeReparto && (
