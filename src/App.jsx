@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, BarChart3, MapPin, Tag, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Printer, AlertTriangle, Download, Users, Mail, ShieldCheck, Monitor, Type, MessageSquare, CalendarClock, LayoutGrid, Trash2, Star, CreditCard, Palette } from "lucide-react";
+import { QrCode, ArrowRight, RotateCcw, SkipForward, X, Bell, Clock, CheckCircle2, Building2, Link2, Check, Plus, Search, BarChart3, MapPin, Tag, ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Printer, AlertTriangle, Download, Users, Mail, ShieldCheck, Monitor, Type, MessageSquare, CalendarClock, LayoutGrid, Trash2, Star, CreditCard, Palette, Sun } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "./lib/supabaseClient";
 import Login from "./components/Login";
@@ -654,6 +654,19 @@ const handleLogout = async () => {
     setTemaTeal((v) => {
       const nuovo = !v;
       localStorage.setItem("prossimo_tema", nuovo ? "teal" : "scuro");
+      return nuovo;
+    });
+  };
+
+  // Modalita' chiara/scura, indipendente dallo schema colori sopra (come su
+  // un telefono): scelta anche questa per-dispositivo.
+  const [modoChiaro, setModoChiaro] = useState(
+    () => localStorage.getItem("prossimo_modo") === "chiaro"
+  );
+  const cambiaModo = () => {
+    setModoChiaro((v) => {
+      const nuovo = !v;
+      localStorage.setItem("prossimo_modo", nuovo ? "chiaro" : "scuro");
       return nuovo;
     });
   };
@@ -1970,7 +1983,7 @@ const handleLogout = async () => {
   }
 
   return (
-    <div className={"board" + (temaTeal ? " tema-teal" : "")}>
+    <div className={"board" + (temaTeal ? " tema-teal" : "") + (modoChiaro ? " modo-chiaro" : "")}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=IBM+Plex+Mono:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
 
@@ -1992,6 +2005,13 @@ const handleLogout = async () => {
           --c-primary-hover: #d9ac52;
           --c-primary-light: #e6c073;
           --c-primary-dark: #ab8333;
+          /* Colore sempre leggibile sopra una superficie chiara fissa (ticket,
+             pulsante primario, QR) e sempre leggibile sopra una superficie
+             scura fissa (es. banner rossi) — indipendenti da scuro/chiaro. */
+          --c-on-light: var(--c-bg);
+          --c-on-light-rgb: var(--c-bg-rgb);
+          --c-on-dark: var(--c-light);
+          --c-on-dark-rgb: var(--c-light-rgb);
         }
         .board.tema-teal {
           --c-bg: #1a232a;
@@ -2007,6 +2027,27 @@ const handleLogout = async () => {
           --c-primary-hover: #3fb0ad;
           --c-primary-light: #6cc9c7;
           --c-primary-dark: #1c6462;
+        }
+        /* Modalita' chiara: indipendente dallo schema colori sopra (vince
+           sempre su sfondo/pannelli/testo, qualunque colore sia attivo).
+           --c-on-light/--c-on-dark vengono ridefiniti qui esplicitamente
+           (non concatenati) perche' in chiaro il ticket/QR restano chiari
+           e il testo di default diventa scuro: l'inchiostro "sopra il
+           chiaro" e il colore "sopra lo scuro" non coincidono piu' con
+           --c-bg/--c-light come in modalita' scura. */
+        .board.modo-chiaro {
+          --c-bg: #F3EFE4;
+          --c-bg-rgb: 243,239,228;
+          --c-panel: #FFFFFF;
+          --c-panel-hover: #ECE7D8;
+          --c-light: #16302B;
+          --c-light-rgb: 22,48,43;
+          --c-muted: rgba(22,48,43,0.6);
+          --c-muted-rgb: 22,48,43;
+          --c-on-dark: #FFFFFF;
+          --c-on-dark-rgb: 255,255,255;
+          --c-on-light: var(--c-light);
+          --c-on-light-rgb: var(--c-light-rgb);
         }
 
         .board {
@@ -2038,6 +2079,7 @@ const handleLogout = async () => {
         }
         .wordmark .dot { width: 7px; height: 7px; border-radius: 999px; background: #B7472A; }
         .wordmark-row { display: flex; align-items: center; justify-content: space-between; }
+        .theme-toggles { display: flex; align-items: center; gap: 2px; }
         .tema-toggle {
           border: none;
           background: transparent;
@@ -2073,12 +2115,12 @@ const handleLogout = async () => {
           color: var(--c-muted);
           transition: all 0.2s ease;
         }
-        .tab-btn.active { background: var(--c-primary); color: var(--c-bg); }
+        .tab-btn.active { background: var(--c-primary); color: var(--c-on-light); }
 
         .ticket {
           margin-top: 22px;
-          background: var(--c-light);
-          color: var(--c-bg);
+          background: var(--c-on-dark);
+          color: var(--c-on-light);
           border-radius: 18px;
           padding: 26px 22px 22px;
           position: relative;
@@ -2096,7 +2138,7 @@ const handleLogout = async () => {
         .ticket::before { left: -11px; }
         .ticket::after { right: -11px; }
         .perf {
-          border-top: 2px dashed rgba(var(--c-bg-rgb),0.25);
+          border-top: 2px dashed rgba(var(--c-on-light-rgb),0.25);
           margin: 18px 0;
         }
 
@@ -2106,7 +2148,7 @@ const handleLogout = async () => {
           font-weight: 600;
           letter-spacing: 0.12em;
           text-transform: uppercase;
-          color: rgba(var(--c-bg-rgb),0.55);
+          color: rgba(var(--c-on-light-rgb),0.55);
         }
 
         .flap-row { display: flex; gap: 6px; perspective: 400px; }
@@ -2158,7 +2200,7 @@ const handleLogout = async () => {
           cursor: pointer;
           display: flex; align-items: center; justify-content: center; gap: 8px;
         }
-        .cta.primary { background: var(--c-primary); color: var(--c-bg); }
+        .cta.primary { background: var(--c-primary); color: var(--c-on-light); }
         .cta.primary:hover { background: var(--c-primary-hover); }
         .cta.ghost { background: transparent; color: var(--c-muted); border: 1px solid rgba(var(--c-muted-rgb),0.3); margin-top: 12px; }
         .cta.ghost:hover { color: var(--c-light); border-color: rgba(var(--c-light-rgb),0.4); }
@@ -2171,13 +2213,13 @@ const handleLogout = async () => {
           display: flex; align-items: center; justify-content: space-between;
           margin-top: 4px;
         }
-        .status-label { font-size: 13px; color: rgba(var(--c-bg-rgb),0.65); font-weight: 500; }
+        .status-label { font-size: 13px; color: rgba(var(--c-on-light-rgb),0.65); font-weight: 500; }
         .status-value { font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 15px; }
 
         .turn-banner {
           margin-top: 22px;
           background: #B7472A;
-          color: var(--c-light);
+          color: var(--c-on-dark);
           border-radius: 14px;
           padding: 16px 18px;
           display: flex; align-items: center; gap: 10px;
@@ -2366,11 +2408,11 @@ const handleLogout = async () => {
         }
         .ticket-field-input {
           width: 100%;
-          background: var(--c-light);
-          border: 1px solid rgba(var(--c-bg-rgb),0.2);
+          background: var(--c-on-dark);
+          border: 1px solid rgba(var(--c-on-light-rgb),0.2);
           border-radius: 10px;
           padding: 12px 13px;
-          color: var(--c-bg);
+          color: var(--c-on-light);
           font-family: 'IBM Plex Sans', sans-serif;
           font-size: 14px;
           box-sizing: border-box;
@@ -2382,11 +2424,11 @@ const handleLogout = async () => {
         }
         .slot-grid { display: flex; flex-wrap: wrap; gap: 7px; justify-content: center; margin-top: 14px; }
         .slot-grid .chip {
-          border: 1px solid rgba(var(--c-bg-rgb),0.25);
+          border: 1px solid rgba(var(--c-on-light-rgb),0.25);
           background: transparent;
-          color: var(--c-bg);
+          color: var(--c-on-light);
         }
-        .slot-grid .chip.active { background: var(--c-primary); color: var(--c-bg); border-color: var(--c-primary); }
+        .slot-grid .chip.active { background: var(--c-primary); color: var(--c-on-light); border-color: var(--c-primary); }
         .testo-grande .slot-grid .chip { font-size: 15px; padding: 9px 15px; }
         .field-input::placeholder { color: rgba(var(--c-muted-rgb),0.5); }
         .field-input:focus { outline: none; border-color: var(--c-primary); }
@@ -2402,7 +2444,7 @@ const handleLogout = async () => {
           font-weight: 600;
           cursor: pointer;
         }
-        .chip.active { background: var(--c-primary); color: var(--c-bg); border-color: var(--c-primary); }
+        .chip.active { background: var(--c-primary); color: var(--c-on-light); border-color: var(--c-primary); }
 
         .url-chip {
           display: inline-flex;
@@ -2574,15 +2616,26 @@ const handleLogout = async () => {
       <div className="wrap">
         <div className="wordmark-row">
           <div className="wordmark"><span className="dot" />Prossimo</div>
-          <button
-            type="button"
-            className="tema-toggle"
-            onClick={cambiaTema}
-            title={temaTeal ? "Passa al tema verde e oro" : "Passa al tema chiaro e teal"}
-            aria-label="Cambia schema colori"
-          >
-            <Palette size={16} />
-          </button>
+          <div className="theme-toggles">
+            <button
+              type="button"
+              className="tema-toggle"
+              onClick={cambiaModo}
+              title={modoChiaro ? "Passa alla modalita' scura" : "Passa alla modalita' chiara"}
+              aria-label="Cambia modalita' chiara/scura"
+            >
+              <Sun size={16} />
+            </button>
+            <button
+              type="button"
+              className="tema-toggle"
+              onClick={cambiaTema}
+              title={temaTeal ? "Passa al verde e oro" : "Passa al teal"}
+              aria-label="Cambia schema colori"
+            >
+              <Palette size={16} />
+            </button>
+          </div>
         </div>
 
         {installPrompt && !installNascosto && !arrivatoDaScansione && (
@@ -2695,12 +2748,12 @@ const handleLogout = async () => {
             <div className="ticket" style={{ textAlign: "center" }}>
               <div className="eyebrow">{activeBusiness.name} — Cassa</div>
               <div style={{ margin: "18px 0 6px" }}>
-                <CalendarClock size={48} color="var(--c-bg)" style={{ margin: "0 auto" }} />
+                <CalendarClock size={48} color="var(--c-on-light)" style={{ margin: "0 auto" }} />
               </div>
               <div className="ticket-title">
                 Prenotato per le {formatOrarioSlot(prenotazione.slotStart)}
               </div>
-              <p className="ticket-msg" style={{ color: "rgba(var(--c-bg-rgb),0.65)", marginTop: 8 }}>
+              <p className="ticket-msg" style={{ color: "rgba(var(--c-on-light-rgb),0.65)", marginTop: 8 }}>
                 A quell'ora ti assegniamo in automatico un numero vero, nella stessa coda di chi si presenta di persona. Puoi anche chiudere questa pagina: basta riaprirla per vedere il tuo numero quando e' pronto.
               </p>
               <button className="cta ghost" onClick={annullaPrenotazioneCliente}>
@@ -2726,7 +2779,7 @@ const handleLogout = async () => {
                 ))}
               </div>
               {generaSlotDisponibili(activeBusiness, oraCorrente).length === 0 && (
-                <p className="ticket-msg-sm" style={{ color: "rgba(var(--c-bg-rgb),0.5)", marginTop: 10 }}>
+                <p className="ticket-msg-sm" style={{ color: "rgba(var(--c-on-light-rgb),0.5)", marginTop: 10 }}>
                   Nessuna fascia oraria disponibile per oggi.
                 </p>
               )}
@@ -2751,15 +2804,15 @@ const handleLogout = async () => {
             <div className="ticket" style={{ textAlign: "center" }}>
               <div className="eyebrow">{activeBusiness.name} — Cassa</div>
               <div style={{ margin: "18px 0 6px" }}>
-                <Clock size={48} color="var(--c-bg)" style={{ margin: "0 auto" }} />
+                <Clock size={48} color="var(--c-on-light)" style={{ margin: "0 auto" }} />
               </div>
               <div className="ticket-title">
                 Grazie per essere passato/a!
               </div>
-              <p className="ticket-msg" style={{ color: "rgba(var(--c-bg-rgb),0.65)", marginTop: 8 }}>
+              <p className="ticket-msg" style={{ color: "rgba(var(--c-on-light-rgb),0.65)", marginTop: 8 }}>
                 Al momento siamo chiusi. {statoOrari.prossimaAperturaLabel}.
               </p>
-              <p className="ticket-msg-sm" style={{ color: "rgba(var(--c-bg-rgb),0.5)", marginTop: 6 }}>
+              <p className="ticket-msg-sm" style={{ color: "rgba(var(--c-on-light-rgb),0.5)", marginTop: 6 }}>
                 Orario: {formatOra(statoOrari.apertura)}–{formatOra(statoOrari.chiusura)}
               </p>
             </div>
@@ -2767,9 +2820,9 @@ const handleLogout = async () => {
             <div className="ticket" style={{ textAlign: "center" }}>
               <div className="eyebrow">{activeBusiness.name} — {activeReparto ? activeReparto.nome : "Cassa"}</div>
               <div style={{ margin: "18px 0 6px" }}>
-                <QrCode size={64} color="var(--c-bg)" style={{ margin: "0 auto" }} />
+                <QrCode size={64} color="var(--c-on-light)" style={{ margin: "0 auto" }} />
               </div>
-              <p className="ticket-msg" style={{ color: "rgba(var(--c-bg-rgb),0.65)", marginTop: 10 }}>
+              <p className="ticket-msg" style={{ color: "rgba(var(--c-on-light-rgb),0.65)", marginTop: 10 }}>
                 Tocca il pulsante per prendere il tuo numero.
               </p>
               <button className="cta primary" onClick={prendiNumero}>
@@ -2816,7 +2869,7 @@ const handleLogout = async () => {
                 </div>
               )}
               {isNext && !isMyTurn && (
-                <div className="turn-banner" style={{ background: "var(--c-primary)", color: "var(--c-bg)" }}>
+                <div className="turn-banner" style={{ background: "var(--c-primary)", color: "var(--c-on-light)" }}>
                   <Clock size={20} />
                   Preparati, tocca a te tra poco
                 </div>
@@ -2886,7 +2939,7 @@ const handleLogout = async () => {
               )}
               {!giaServito && !activeReparto && (activeBusiness.sms_abilitato || activeBusiness.whatsapp_abilitato) && (smsAttivo || pianoConsenteBusiness) && (
                 smsAttivo ? (
-                  <p className="ticket-msg-sm" style={{ color: "rgba(var(--c-bg-rgb),0.65)", marginTop: 12, textAlign: "center" }}>
+                  <p className="ticket-msg-sm" style={{ color: "rgba(var(--c-on-light-rgb),0.65)", marginTop: 12, textAlign: "center" }}>
                     <MessageSquare size={13} style={{ display: "inline", marginRight: 4, position: "relative", top: -1 }} />
                     Ti avviseremo via {canaleTesto === "whatsapp" ? "WhatsApp" : "SMS"} al {telefonoSms}
                   </p>
@@ -3007,7 +3060,7 @@ const handleLogout = async () => {
                               Staff
                             </button>
                           )}
-                          <button className="cta" style={{ flex: 1, minWidth: 0, background: "#C0392B", color: "var(--c-light)", border: "none" }} onClick={() => handleElimina(b)}>
+                          <button className="cta" style={{ flex: 1, minWidth: 0, background: "#C0392B", color: "var(--c-on-dark)", border: "none" }} onClick={() => handleElimina(b)}>
                             Elimina
                           </button>
                         </div>
@@ -3044,8 +3097,8 @@ const handleLogout = async () => {
                 <QRCodeSVG
                   value={`${window.location.origin}/coda/${activeBusiness.slug}`}
                   size={64}
-                  bgColor="var(--c-light)"
-                  fgColor="var(--c-bg)"
+                  bgColor="var(--c-on-dark)"
+                  fgColor="var(--c-on-light)"
                 />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 11.5, color: "var(--c-muted)", marginBottom: 6 }}>QR della tua coda</div>
@@ -3086,7 +3139,7 @@ const handleLogout = async () => {
                   <FlapNumber value={currentOggi} size="lg" />
 
                   {!activeReparto && activeBusiness.chiamata_prioritaria != null && (
-                    <div className="turn-banner" style={{ background: "var(--c-primary)", color: "var(--c-bg)", flexDirection: "column", alignItems: "stretch", gap: 10 }}>
+                    <div className="turn-banner" style={{ background: "var(--c-primary)", color: "var(--c-on-light)", flexDirection: "column", alignItems: "stretch", gap: 10 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         <Bell size={20} />
                         Chiamata prioritaria: #{activeBusiness.chiamata_prioritaria - baselineOggi}
@@ -3095,7 +3148,7 @@ const handleLogout = async () => {
                         <button className="cta dark" onClick={confermaPrioritarioServito}>
                           <CheckCircle2 size={16} /> Servito
                         </button>
-                        <button className="cta" style={{ margin: 0, background: "transparent", color: "var(--c-bg)", border: "1px solid rgba(var(--c-bg-rgb),0.35)" }} onClick={annullaChiamataPrioritaria}>
+                        <button className="cta" style={{ margin: 0, background: "transparent", color: "var(--c-on-light)", border: "1px solid rgba(var(--c-on-light-rgb),0.35)" }} onClick={annullaChiamataPrioritaria}>
                           <X size={16} /> Annulla
                         </button>
                       </div>
@@ -3103,7 +3156,7 @@ const handleLogout = async () => {
                   )}
 
                   {allertaCodaLunga && (
-                    <div className="turn-banner" style={{ background: "#B7472A", color: "var(--c-light)" }}>
+                    <div className="turn-banner" style={{ background: "#B7472A", color: "var(--c-on-dark)" }}>
                       <AlertTriangle size={20} />
                       <div>
                         Coda lunga:{" "}
@@ -3234,7 +3287,7 @@ const handleLogout = async () => {
                     <button className="cta dark" style={{ flex: 1, minWidth: 0 }} onClick={() => avviaModifica(b, "admin")}>
                       Modifica
                     </button>
-                    <button className="cta" style={{ flex: 1, minWidth: 0, background: "#C0392B", color: "var(--c-light)", border: "none" }} onClick={() => handleElimina(b)}>
+                    <button className="cta" style={{ flex: 1, minWidth: 0, background: "#C0392B", color: "var(--c-on-dark)", border: "none" }} onClick={() => handleElimina(b)}>
                       Elimina
                     </button>
                   </div>
@@ -3313,7 +3366,7 @@ const handleLogout = async () => {
                       <button className="cta dark" style={{ flex: 1, minWidth: 0 }} onClick={() => handleModificaEmailUtente(u)}>
                         Modifica email
                       </button>
-                      <button className="cta" style={{ flex: 1, minWidth: 0, background: "#C0392B", color: "var(--c-light)", border: "none" }} onClick={() => handleEliminaUtente(u)}>
+                      <button className="cta" style={{ flex: 1, minWidth: 0, background: "#C0392B", color: "var(--c-on-dark)", border: "none" }} onClick={() => handleEliminaUtente(u)}>
                         Elimina
                       </button>
                     </div>
@@ -3840,15 +3893,15 @@ const handleLogout = async () => {
                     {activeBusiness.name}
                   </div>
                   {activeBusiness.address && (
-                    <div style={{ fontSize: 12.5, color: "rgba(var(--c-bg-rgb),0.6)", marginTop: 2 }}>{activeBusiness.address}</div>
+                    <div style={{ fontSize: 12.5, color: "rgba(var(--c-on-light-rgb),0.6)", marginTop: 2 }}>{activeBusiness.address}</div>
                   )}
 
                   <div style={{ display: "flex", justifyContent: "center", margin: "16px 0" }}>
                     <QRCodeSVG
                       value={`${window.location.origin}/coda/${activeBusiness.slug}`}
                       size={160}
-                      bgColor="var(--c-light)"
-                      fgColor="var(--c-bg)"
+                      bgColor="var(--c-on-dark)"
+                      fgColor="var(--c-on-light)"
                     />
                   </div>
 
@@ -3856,7 +3909,7 @@ const handleLogout = async () => {
                     <Link2 size={13} />
                     tuapp.it/coda/{activeBusiness.slug}
                   </div>
-                  <p style={{ fontSize: 11.5, color: "rgba(var(--c-bg-rgb),0.55)", marginTop: 10 }}>
+                  <p style={{ fontSize: 11.5, color: "rgba(var(--c-on-light-rgb),0.55)", marginTop: 10 }}>
                     Stampa questo QR ed esponilo in cassa: ogni scansione apre la coda di "{activeBusiness.name}".
                   </p>
                 </div>
