@@ -104,8 +104,34 @@ const calcolaAsseY = (massimo) => {
 function MiniBarChart({ labels, series, chiusi }) {
   const massimoReale = Math.max(...series.flatMap((s) => s.data), 0);
   const { maxTick, tacche } = calcolaAsseY(massimoReale);
+
+  // Tooltip al tocco/click sulla colonna (non sulla singola barra sottile,
+  // troppo piccola da centrare col dito): un indice attivo alla volta,
+  // chiuso toccando di nuovo la stessa colonna o fuori dal grafico.
+  const [tooltipIndex, setTooltipIndex] = useState(null);
+  const chartRef = useRef(null);
+
+  // Cambio periodo (altre labels): chiude il tooltip aggiornando lo stato
+  // durante il render invece che in un effetto, cosi' non resta un indice
+  // ormai riferito al giorno sbagliato. Pattern consigliato da React per
+  // "adjusting state when a prop changes".
+  const [prevLabels, setPrevLabels] = useState(labels);
+  if (labels !== prevLabels) {
+    setPrevLabels(labels);
+    setTooltipIndex(null);
+  }
+
+  useEffect(() => {
+    if (tooltipIndex === null) return;
+    const chiudiSeFuori = (e) => {
+      if (chartRef.current && !chartRef.current.contains(e.target)) setTooltipIndex(null);
+    };
+    document.addEventListener("click", chiudiSeFuori);
+    return () => document.removeEventListener("click", chiudiSeFuori);
+  }, [tooltipIndex]);
+
   return (
-    <div>
+    <div ref={chartRef}>
       <div className="bar-chart">
         <div className="bar-chart-y-axis">
           {tacche.map((val) => (
@@ -120,7 +146,29 @@ function MiniBarChart({ labels, series, chiusi }) {
           </div>
           <div className="bar-chart-bars">
             {labels.map((label, i) => (
-              <div className="bar-col" key={i} style={chiusi?.[i] ? { opacity: 0.35 } : undefined}>
+              <button
+                type="button"
+                className="bar-col"
+                key={i}
+                style={chiusi?.[i] ? { opacity: 0.35 } : undefined}
+                onClick={() => setTooltipIndex((idx) => (idx === i ? null : i))}
+                aria-label={`${label}: ${chiusi?.[i] ? "chiuso" : series.map((s) => `${s.name} ${s.data[i]}`).join(", ")}`}
+              >
+                {tooltipIndex === i && (
+                  <div className="bar-tooltip">
+                    <div className="bar-tooltip-label">{label}</div>
+                    {chiusi?.[i] ? (
+                      <div className="bar-tooltip-row">Chiuso</div>
+                    ) : (
+                      series.map((s) => (
+                        <div className="bar-tooltip-row" key={s.name}>
+                          <span className="bar-tooltip-dot" style={{ background: s.color }} />
+                          {s.name}: {s.data[i]}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
                 <div className="bar-group">
                   {series.map((s) => (
                     <div
@@ -130,12 +178,11 @@ function MiniBarChart({ labels, series, chiusi }) {
                         height: s.data[i] > 0 ? `${Math.max((s.data[i] / maxTick) * 100, 4)}%` : "0%",
                         background: s.color,
                       }}
-                      title={chiusi?.[i] ? `${label}: chiuso` : `${s.name}: ${s.data[i]}`}
                     />
                   ))}
                 </div>
                 <span className="bar-lbl">{label}{chiusi?.[i] ? " ✕" : ""}</span>
-              </div>
+              </button>
             ))}
           </div>
         </div>
@@ -2538,7 +2585,46 @@ const handleLogout = async () => {
           flex-direction: column;
           justify-content: flex-end;
           align-items: center;
+          position: relative;
+          margin: 0;
+          border: none;
+          background: transparent;
+          padding: 0;
+          font: inherit;
+          cursor: pointer;
+          -webkit-tap-highlight-color: transparent;
         }
+        .bar-col:focus-visible { outline: 2px solid var(--c-primary); outline-offset: 2px; border-radius: 4px; }
+        .bar-tooltip {
+          position: absolute;
+          bottom: calc(100% + 8px);
+          left: 50%;
+          transform: translateX(-50%);
+          z-index: 2;
+          background: var(--c-bg);
+          border: 1px solid rgba(var(--c-muted-rgb),0.25);
+          border-radius: 8px;
+          padding: 7px 10px;
+          white-space: nowrap;
+          box-shadow: 0 8px 18px -6px rgba(0,0,0,0.5);
+          text-align: left;
+        }
+        .bar-tooltip-label {
+          font-family: 'IBM Plex Mono', monospace;
+          font-size: 9.5px;
+          font-weight: 700;
+          color: var(--c-light);
+          margin-bottom: 3px;
+        }
+        .bar-tooltip-row {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          font-size: 10.5px;
+          color: var(--c-muted);
+          line-height: 1.5;
+        }
+        .bar-tooltip-dot { width: 6px; height: 6px; border-radius: 999px; flex-shrink: 0; }
         .bar-group {
           width: 100%;
           height: 100%;
