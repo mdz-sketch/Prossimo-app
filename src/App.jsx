@@ -2066,6 +2066,28 @@ const handleLogout = async () => {
         }
         .wrap { width: 100%; max-width: 420px; }
 
+        /* Da PC (banco/cassa su schermo largo): stessa struttura impilata
+           di sempre, solo più larga e con gli elementi chiave più grandi
+           (numero in servizio, pulsanti Avanti/Richiama/Assente) — niente
+           riorganizzazione a colonne, cosi' il rischio di nuovi bug resta
+           minimo e il comportamento su telefono non cambia. */
+        @media (min-width: 900px) {
+          .board { padding: 48px 24px 80px; }
+          .wrap { max-width: 720px; }
+          .wordmark { font-size: 18px; }
+          .flap-row.lg .flap-shell { width: 76px; height: 104px; }
+          .flap-row.lg .flap-face { font-size: 58px; }
+          .op-actions-circle { gap: 28px; margin-top: 24px; }
+          .circle-btn.primary { width: 100px; height: 100px; }
+          .circle-btn.primary svg { width: 32px; height: 32px; }
+          .circle-btn.secondary { width: 68px; height: 68px; }
+          .circle-btn.secondary svg { width: 24px; height: 24px; }
+          .circle-btn-label { font-size: 13px; }
+          .circle-btn-label.primary { font-size: 15px; }
+          .board-panel { padding: 28px; }
+          .stat-num { font-size: 22px; }
+        }
+
         .wordmark {
           font-family: 'Archivo', sans-serif;
           font-weight: 900;
