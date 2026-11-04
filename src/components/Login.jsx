@@ -94,7 +94,7 @@ export default function Login({ onLoginSuccess }) {
 
   if (modalita === 'recupero') {
     return (
-      <div className="board-panel">
+      <div className="board-panel login-panel">
         <div className="board-label"><KeyRound size={13} style={{ display: 'inline', marginRight: 6, position: 'relative', top: -1 }} />Recupera password</div>
         {messaggio ? (
           <>
@@ -128,7 +128,7 @@ export default function Login({ onLoginSuccess }) {
 
   if (modalita === 'registrazione') {
     return (
-      <div className="board-panel">
+      <div className="board-panel login-panel">
         <div className="board-label"><UserPlus size={13} style={{ display: 'inline', marginRight: 6, position: 'relative', top: -1 }} />Registrati come operatore</div>
         {messaggio ? (
           <>
@@ -165,7 +165,7 @@ export default function Login({ onLoginSuccess }) {
   }
 
   return (
-    <div className="board-panel">
+    <div className="board-panel login-panel">
       <div className="board-label"><LogIn size={13} style={{ display: 'inline', marginRight: 6, position: 'relative', top: -1 }} />Accesso operatore</div>
       <form onSubmit={handleLogin}>
         <label className="field-label" style={{ marginTop: 0 }}>Email</label>
