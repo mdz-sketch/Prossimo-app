@@ -2139,11 +2139,9 @@ const handleLogout = async () => {
           .board-panel { padding: 28px; }
           .stat-num { font-size: 22px; }
 
-          .app-shell { flex-direction: row; align-items: flex-start; gap: 32px; }
+          .app-shell { flex-direction: row; align-items: stretch; gap: 32px; }
           .app-nav {
             flex: 0 0 224px;
-            position: sticky;
-            top: 32px;
             background: var(--c-panel);
             border-radius: 18px;
             padding: 14px;
@@ -2162,6 +2160,7 @@ const handleLogout = async () => {
           .stats-charts-row { display: grid; grid-template-columns: 1.3fr 1fr; gap: 20px; align-items: start; }
           .stats-chart-wait { margin-top: 0; }
           .login-panel { max-width: 420px; margin-left: auto; margin-right: auto; }
+          .install-banner { max-width: 640px; margin-left: auto; margin-right: auto; }
         }
 
         .wordmark {
@@ -2776,7 +2775,7 @@ const handleLogout = async () => {
         </div>
 
         {installPrompt && !installNascosto && !arrivatoDaScansione && (
-          <div style={{
+          <div className="install-banner" style={{
             marginTop: 14,
             background: "var(--c-panel)",
             borderRadius: 12,
