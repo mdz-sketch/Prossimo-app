@@ -2113,14 +2113,19 @@ const handleLogout = async () => {
         }
         .wrap { width: 100%; max-width: 420px; }
 
-        /* Da PC (banco/cassa su schermo largo): stessa struttura impilata
-           di sempre, solo più larga e con gli elementi chiave più grandi
-           (numero in servizio, pulsanti Avanti/Richiama/Assente) — niente
-           riorganizzazione a colonne, cosi' il rischio di nuovi bug resta
-           minimo e il comportamento su telefono non cambia. */
+        .app-shell { display: flex; flex-direction: column; min-width: 0; }
+        .app-nav { min-width: 0; }
+        .app-nav-extra { margin-top: 10px; margin-bottom: -6px; display: flex; gap: 8px; }
+        .app-content { min-width: 0; }
+        .stats-charts-row { min-width: 0; }
+        .stats-chart-wait { margin-top: 18px; }
+
+        /* Da PC: sidebar fissa con navigazione + cambio sezione a sinistra,
+           contenuto a schermo pieno a destra invece di una colonna stretta
+           centrata — su telefono resta tutto impilato come prima. */
         @media (min-width: 900px) {
-          .board { padding: 48px 24px 80px; }
-          .wrap { max-width: 720px; }
+          .board { padding: 40px 32px 80px; }
+          .wrap { max-width: 1180px; }
           .wordmark { font-size: 18px; }
           .flap-row.lg .flap-shell { width: 76px; height: 104px; }
           .flap-row.lg .flap-face { font-size: 58px; }
@@ -2133,6 +2138,29 @@ const handleLogout = async () => {
           .circle-btn-label.primary { font-size: 15px; }
           .board-panel { padding: 28px; }
           .stat-num { font-size: 22px; }
+
+          .app-shell { flex-direction: row; align-items: flex-start; gap: 32px; }
+          .app-nav {
+            flex: 0 0 224px;
+            position: sticky;
+            top: 32px;
+            background: var(--c-panel);
+            border-radius: 18px;
+            padding: 14px;
+          }
+          .app-nav .tabs {
+            margin-top: 0;
+            flex-direction: column;
+            background: transparent;
+            padding: 0;
+            gap: 3px;
+          }
+          .app-nav .tab-btn { flex: none; text-align: left; padding: 11px 14px; }
+          .app-nav-extra { flex-direction: column; margin-top: 14px; margin-bottom: 0; gap: 6px; }
+          .app-content { flex: 1; }
+
+          .stats-charts-row { display: grid; grid-template-columns: 1.3fr 1fr; gap: 20px; align-items: start; }
+          .stats-chart-wait { margin-top: 0; }
         }
 
         .wordmark {
@@ -2796,35 +2824,39 @@ const handleLogout = async () => {
           />
         ) : (
         <>
+        <div className="app-shell">
         {isLoggedIn && (
-        <div className="tabs">
-          {!isAdmin && (
-            <button className={"tab-btn" + (view === "operatore" ? " active" : "")} onClick={() => setView("operatore")}>Operatore</button>
+        <div className="app-nav">
+          <div className="tabs">
+            {!isAdmin && (
+              <button className={"tab-btn" + (view === "operatore" ? " active" : "")} onClick={() => setView("operatore")}>Operatore</button>
+            )}
+            {puoCrearNuovaAttivita && (
+              <button className={"tab-btn" + (view === "registrazione" ? " active" : "")} onClick={() => { setAttivitaInModifica(null); nuovaRegistrazione(); setView("registrazione"); }}>Crea Attività</button>
+            )}
+            {isAdmin && (
+              <button className={"tab-btn" + (view === "admin" ? " active" : "")} onClick={() => setView("admin")}>Admin</button>
+            )}
+            {isAdmin && (
+              <button className={"tab-btn" + (view === "utenti" ? " active" : "")} onClick={() => setView("utenti")}>Utenti</button>
+            )}
+            <button className="tab-btn" onClick={handleLogout}>Esci</button>
+          </div>
+
+          {(view === "operatore" || view === "statistiche") && (
+            <div className="app-nav-extra">
+              {isAdmin ? (
+                <button className="cta ghost" onClick={() => setView("admin")}>Torna ad Admin</button>
+              ) : (
+                <button className="cta ghost" onClick={() => { setActiveBusiness(null); setView("operatore"); }}>Le mie attività</button>
+              )}
+              <button className="cta ghost" onClick={() => setView("statistiche")}>Statistiche</button>
+            </div>
           )}
-          {puoCrearNuovaAttivita && (
-            <button className={"tab-btn" + (view === "registrazione" ? " active" : "")} onClick={() => { setAttivitaInModifica(null); nuovaRegistrazione(); setView("registrazione"); }}>Crea Attività</button>
-          )}
-          {isAdmin && (
-            <button className={"tab-btn" + (view === "admin" ? " active" : "")} onClick={() => setView("admin")}>Admin</button>
-          )}
-          {isAdmin && (
-            <button className={"tab-btn" + (view === "utenti" ? " active" : "")} onClick={() => setView("utenti")}>Utenti</button>
-          )}
-          <button className="tab-btn" onClick={handleLogout}>Esci</button>
         </div>
         )}
 
-        {(view === "operatore" || view === "statistiche") && isLoggedIn && (
-          <div style={{ marginTop: 10, marginBottom: -6, display: "flex", gap: 8 }}>
-            {isAdmin ? (
-              <button className="cta ghost" onClick={() => setView("admin")}>Torna ad Admin</button>
-            ) : (
-              <button className="cta ghost" onClick={() => { setActiveBusiness(null); setView("operatore"); }}>Le mie attività</button>
-            )}
-            <button className="cta ghost" onClick={() => setView("statistiche")}>Statistiche</button>
-          </div>
-        )}
-
+        <div className="app-content">
         {errore && (
           <div className="error-box">{errore}</div>
         )}
@@ -3575,30 +3607,36 @@ const handleLogout = async () => {
                   </div>
                 </div>
 
-                <div className="board-label" style={{ marginTop: 4 }}>Persone</div>
-                <MiniBarChart
-                  labels={andamentoStats.labels}
-                  chiusi={giorniChiusiSettimana}
-                  series={[
-                    { name: "Serviti", data: andamentoStats.serviti, color: "var(--c-primary)" },
-                    { name: "Non presentati", data: andamentoStats.nonPresentati, color: "#B7472A" },
-                  ]}
-                />
-                <p style={{ fontSize: 11, color: "var(--c-muted)", marginTop: 10, textAlign: "center" }}>
-                  Per fascia del periodo selezionato
-                </p>
+                <div className="stats-charts-row">
+                  <div>
+                    <div className="board-label" style={{ marginTop: 4 }}>Persone</div>
+                    <MiniBarChart
+                      labels={andamentoStats.labels}
+                      chiusi={giorniChiusiSettimana}
+                      series={[
+                        { name: "Serviti", data: andamentoStats.serviti, color: "var(--c-primary)" },
+                        { name: "Non presentati", data: andamentoStats.nonPresentati, color: "#B7472A" },
+                      ]}
+                    />
+                    <p style={{ fontSize: 11, color: "var(--c-muted)", marginTop: 10, textAlign: "center" }}>
+                      Per fascia del periodo selezionato
+                    </p>
+                  </div>
 
-                <div className="board-label" style={{ marginTop: 18 }}>Attesa media (min)</div>
-                <MiniBarChart
-                  labels={andamentoStats.labels}
-                  chiusi={giorniChiusiSettimana}
-                  series={[
-                    { name: "Attesa media (min)", data: andamentoStats.attesaMedia, color: "#5C87A6" },
-                  ]}
-                />
-                <p style={{ fontSize: 11, color: "var(--c-muted)", marginTop: 10, textAlign: "center" }}>
-                  Per fascia del periodo selezionato
-                </p>
+                  <div className="stats-chart-wait">
+                    <div className="board-label">Attesa media (min)</div>
+                    <MiniBarChart
+                      labels={andamentoStats.labels}
+                      chiusi={giorniChiusiSettimana}
+                      series={[
+                        { name: "Attesa media (min)", data: andamentoStats.attesaMedia, color: "#5C87A6" },
+                      ]}
+                    />
+                    <p style={{ fontSize: 11, color: "var(--c-muted)", marginTop: 10, textAlign: "center" }}>
+                      Per fascia del periodo selezionato
+                    </p>
+                  </div>
+                </div>
 
                 <div className="stats-divider" />
 
@@ -4039,6 +4077,8 @@ const handleLogout = async () => {
         <div style={{ marginTop: 18, textAlign: "center", fontSize: 11.5, color: "rgba(var(--c-light-rgb),0.35)" }}>
           <CheckCircle2 size={12} style={{ display: "inline", marginRight: 4, position: "relative", top: -1 }} />
           Collegato a Supabase — dati reali e sincronizzati in tempo reale
+        </div>
+        </div>
         </div>
         </>
         )}
