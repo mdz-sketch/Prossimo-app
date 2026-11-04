@@ -2125,7 +2125,7 @@ const handleLogout = async () => {
            centrata — su telefono resta tutto impilato come prima. */
         @media (min-width: 900px) {
           .board { padding: 40px 32px 80px; }
-          .wrap { max-width: 1180px; }
+          .wrap { max-width: clamp(1024px, 92vw, 1680px); }
           .wordmark { font-size: 18px; }
           .flap-row.lg .flap-shell { width: 76px; height: 104px; }
           .flap-row.lg .flap-face { font-size: 58px; }
