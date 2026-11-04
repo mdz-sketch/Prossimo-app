@@ -2161,6 +2161,7 @@ const handleLogout = async () => {
 
           .stats-charts-row { display: grid; grid-template-columns: 1.3fr 1fr; gap: 20px; align-items: start; }
           .stats-chart-wait { margin-top: 0; }
+          .login-panel { max-width: 420px; margin-left: auto; margin-right: auto; }
         }
 
         .wordmark {

@@ -35,7 +35,7 @@ export default function ImpostaNuovaPassword({ onCompletato }) {
   };
 
   return (
-    <div className="board-panel">
+    <div className="board-panel login-panel">
       <div className="board-label"><KeyRound size={13} style={{ display: 'inline', marginRight: 6, position: 'relative', top: -1 }} />Imposta nuova password</div>
       <form onSubmit={handleSubmit}>
         <label className="field-label" style={{ marginTop: 0 }}>Nuova password</label>
