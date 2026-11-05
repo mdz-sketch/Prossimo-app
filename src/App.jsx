@@ -2161,6 +2161,15 @@ const handleLogout = async () => {
           .stats-chart-wait { margin-top: 0; }
           .login-panel { max-width: 420px; margin-left: auto; margin-right: auto; }
           .install-banner { max-width: 640px; margin-left: auto; margin-right: auto; }
+
+          .bar-chart { height: 200px; gap: 10px; }
+          .bar-chart-gridlines { bottom: 20px; }
+          .bar-chart-y-axis { font-size: 11px; }
+          .bar-group { gap: 3px; }
+          .bar { max-width: 16px; }
+          .bar-lbl { font-size: 10px; margin-top: 8px; }
+          .bar-tooltip-label { font-size: 11px; }
+          .bar-tooltip-row { font-size: 12px; }
         }
 
         .wordmark {
